@@ -1,0 +1,101 @@
+{% extends 'layout/base.html' %}
+{% block title %}Trang Chủ | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-content">
+    <h1 class="hero-title">Đồ Ăn Ngon — Giao Tận Nơi</h1>
+    <p class="hero-subtitle">
+      Khám phá hàng trăm nhà hàng và món ăn hấp dẫn, đặt chỉ trong vài giây.
+    </p>
+    <form
+      class="hero-search d-flex mx-auto"
+      action="{{ url_for('browse.search_view') }}"
+      method="get"
+      role="search">
+      <input
+        class="form-control form-control-lg"
+        type="search"
+        name="q"
+        value="{{ request.args.get('q', '') }}"
+        placeholder="Tìm nhà hàng hoặc món ăn..."
+        aria-label="Tìm kiếm" />
+      <button class="btn btn-hero btn-lg" type="submit">Tìm</button>
+    </form>
+    <div class="hero-actions">
+      <a href="#restaurants" class="btn btn-primary btn-lg btn-hero">Khám phá ngay</a>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="feature-card">
+        <div class="feature-icon">&#128682;</div>
+        <h3>Giao nhanh</h3>
+        <p>Shipper lấy món và giao tận nơi, theo dõi trực tuyến.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="feature-card">
+        <div class="feature-icon">&#128179;</div>
+        <h3>Thanh toán an toàn</h3>
+        <p>Thanh toán trực tuyến qua payOS, giao dịch bảo mật.</p>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="feature-card">
+        <div class="feature-icon">&#11088;</div>
+        <h3>Đánh giá thật</h3>
+        <p>Cảm nhận từ khách hàng đã trải nghiệm, chọn đúng món ngon.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="restaurants" class="restaurants">
+  <div class="section-header">
+    <h2 class="section-title">Nhà Hàng Nổi Bật</h2>
+    <p class="section-subtitle">Các nhà hàng đã được duyệt, sẵn sàng phục vụ bạn.</p>
+  </div>
+
+  {% if restaurants %}
+  <div class="row g-4">
+    {% for restaurant in restaurants %}
+    <div class="col-md-6 col-lg-4">
+      <div class="restaurant-card">
+        <div class="restaurant-body">
+          <h3 class="restaurant-name">{{ restaurant.name }}</h3>
+          <p class="restaurant-desc">{{ restaurant.description }}</p>
+          <p class="restaurant-address">
+            &#128205; {{ restaurant.address }} &middot;
+            <span class="text-success">{{ 'Mở cửa' if restaurant.is_open else 'Đóng cửa' }}</span>
+          </p>
+
+          <div class="restaurant-dishes">
+            {% for dish in restaurant.dishes[:3] if dish.is_available %}
+            <div class="dish-row">
+              <span class="dish-name">{{ dish.name }}</span>
+              <span class="dish-price">{{ dish.price|vnd }}</span>
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="restaurant-actions">
+            <a
+              href="{{ url_for('browse.restaurant_menu_view', restaurant_id=restaurant.id) }}"
+              class="btn btn-outline-primary btn-sm">Xem thực đơn</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>Chưa có nhà hàng nào. Vui lòng quay lại sau!</p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

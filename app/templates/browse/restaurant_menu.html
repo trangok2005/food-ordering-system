@@ -1,0 +1,48 @@
+{% extends 'layout/base.html' %}
+{% block title %}{{ restaurant.name }} | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
+  <p class="restaurant-hero-desc">{{ restaurant.description }}</p>
+  <p class="restaurant-address">
+    &#128205; {{ restaurant.address }} &middot; &#128222; {{ restaurant.phone }}
+  </p>
+  <span class="badge bg-success">{{ 'Mở cửa' if restaurant.is_open else 'Đóng cửa' }}</span>
+</section>
+
+<section class="menu">
+  {% if menu %}
+  {% for category in restaurant.categories %}
+  {% set dishes = menu|selectattr('category_id', 'eq', category.id)|list %}
+  {% if dishes %}
+  <div class="menu-category">
+    <h3 class="menu-category-title">{{ category.name }}</h3>
+    <div class="row g-4">
+      {% for dish in dishes %}
+      <div class="col-md-6 col-lg-4">
+        <div class="dish-card">
+          <div class="dish-card-body">
+            <h4 class="dish-card-name">{{ dish.name }}</h4>
+            <p class="dish-card-desc">{{ dish.description }}</p>
+            <div class="dish-card-footer">
+              <span class="dish-price">{{ dish.price|vnd }}</span>
+              <form method="post" action="{{ url_for('cart.add_to_cart') }}">
+                <input type="hidden" name="dish_id" value="{{ dish.id }}" />
+                <input type="hidden" name="quantity" value="1" />
+                <button class="btn btn-primary btn-sm" type="submit">Thêm vào giỏ</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+  {% else %}
+  <div class="empty-state"><p>Nhà hàng chưa có món nào đang bán.</p></div>
+  {% endif %}
+</section>
+{% endblock %}

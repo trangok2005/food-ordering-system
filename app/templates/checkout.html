@@ -1,0 +1,160 @@
+{% extends 'layout/base.html' %}
+{% block title %}Thanh Toán | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="checkout-page">
+  <h2 class="section-title">Thanh Toán</h2>
+
+  {% if issues %}
+  <div class="alert alert-danger" role="alert">
+    <strong>Chưa thể thanh toán:</strong>
+    <ul class="mb-0 mt-1 ps-3">
+      {% for issue in issues %}<li>{{ issue }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if carts %}
+  <form
+    method="post"
+    action="{{ url_for('cart.create_payment') }}"
+    id="checkout-form"
+    novalidate>
+    <div class="row g-4">
+      <div class="col-lg-8">
+        {% for cart in carts %}
+        <div class="cart-card mb-4">
+          <div class="cart-card-header">
+            <h3 class="cart-restaurant">{{ cart.restaurant.name }}</h3>
+            <span class="badge bg-{{ 'success' if cart.restaurant.is_open else 'secondary' }}">
+              {{ 'Đang mở' if cart.restaurant.is_open else 'Đóng cửa' }}
+            </span>
+          </div>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <tbody>
+                {% for item in cart.items %}
+                <tr class="{{ 'table-warning' if not item.dish.is_available }}">
+                  <td>
+                    {{ item.dish.name }}
+                    {% if not item.dish.is_available %}
+                    <span class="badge bg-danger ms-1">Hết hàng</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-center">{{ item.quantity }} x {{ item.dish.price|vnd }}</td>
+                  <td class="text-end">{{ (item.dish.price * item.quantity)|vnd }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="cart-total">
+            <span>Tổng:</span>
+            <strong>{{ cart.total_amount()|vnd }}</strong>
+          </div>
+        </div>
+        {% endfor %}
+
+        <div class="cart-card delivery-info">
+          <div class="cart-card-header">
+            <h3 class="cart-restaurant">Thông tin nhận hàng</h3>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="phone">Số điện thoại <span class="text-danger">*</span></label>
+              <input
+                class="form-control"
+                type="tel"
+                id="phone"
+                name="phone"
+                value="{{ current_user.phone or '' }}"
+                pattern="[0-9]{10,11}"
+                required />
+              <div class="invalid-feedback">Vui lòng nhập số điện thoại 10-11 số.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="address">Địa chỉ giao hàng <span class="text-danger">*</span></label>
+              <input
+                class="form-control"
+                type="text"
+                id="address"
+                name="address"
+                value="{{ current_user.address or '' }}"
+                placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+                required />
+              <div class="invalid-feedback">Vui lòng nhập địa chỉ nhận hàng.</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="note">Ghi chú cho nhà hàng</label>
+              <textarea
+                class="form-control"
+                id="note"
+                name="note"
+                rows="2"
+                placeholder="Ví dụ: không hành, ít cay, gọi trước khi giao..."></textarea>
+            </div>
+            <div class="col-12">
+              <button type="button" id="use-location" class="btn btn-outline-primary btn-sm">
+                &#128205; Dùng vị trí hiện tại
+              </button>
+              <small id="location-status" class="text-muted ms-2"></small>
+              <input type="hidden" name="lat" id="lat" />
+              <input type="hidden" name="lng" id="lng" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-4">
+        <div class="checkout-summary">
+          <h4>Tóm tắt đơn hàng</h4>
+          <div class="d-flex justify-content-between mb-2">
+            <span>Tổng cộng:</span>
+            <strong>{{ total|vnd }}</strong>
+          </div>
+          <hr />
+          <p class="text-muted small mb-3">
+            Thanh toán trực tuyến qua <strong>payOS</strong>. Sau khi bấm nút bên dưới, bạn có
+            <strong>10 giây</strong> để hủy miễn phí.
+          </p>
+          <button
+            type="button"
+            id="confirm-order"
+            class="btn btn-hero w-100"
+            {{ 'disabled' if issues }}>
+            Đặt hàng &amp; Thanh toán
+          </button>
+          <a
+            href="{{ url_for('cart.cart_view') }}"
+            class="btn btn-outline-secondary w-100 mt-2">Quay lại giỏ hàng</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  <div class="modal fade" id="countdownModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-body text-center p-4">
+          <div class="countdown-number" id="countdown-number">10</div>
+          <p class="mb-1 fw-bold">Đang chuẩn bị thanh toán...</p>
+          <p class="text-muted small mb-3">
+            Bạn có thể hủy miễn phí trong 10 giây. Hết thời gian, hệ thống sẽ chuyển sang cổng thanh toán payOS.
+          </p>
+          <button type="button" id="cancel-countdown" class="btn btn-outline-danger">Hủy đơn (miễn phí)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>Giỏ hàng trống.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Khám phá món ngon</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/checkout.js') }}"></script>
+{% endblock %}

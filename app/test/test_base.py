@@ -5,7 +5,7 @@ from flask import Flask
 from flask_login import LoginManager
 
 from app import db
-from app.models import Product, OrderDetail, Order, OrderStatus, UserRole, User
+from app.models import UserRole, User
 from app.index import register_routers
 
 

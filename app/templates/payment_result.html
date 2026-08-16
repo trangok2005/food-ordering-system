@@ -1,0 +1,73 @@
+{% extends 'layout/base.html' %}
+{% block title %}Kết Quả Thanh Toán | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="payment-result">
+  {% if success %}
+  <div class="payment-icon payment-success">&#10004;</div>
+  <h2 class="section-title">Thanh toán thành công!</h2>
+  <p class="section-subtitle">
+    Cảm ơn bạn đã đặt hàng. Đơn hàng đã được thanh toán qua payOS và đang chờ nhà hàng xác nhận.
+  </p>
+
+  {% if total %}
+  <p class="payment-total">Tổng tiền đã thanh toán: <strong>{{ total|vnd }}</strong></p>
+  {% endif %}
+
+  <div class="payment-orders mt-4">
+    {% for order in orders %}
+    <div class="cart-card mb-3">
+      <div class="cart-card-header">
+        <div>
+          <h3 class="cart-restaurant mb-0">{{ order.restaurant.name }}</h3>
+          <small class="text-muted">Đơn #{{ order.id }} &middot; {{ order.created_date.strftime('%H:%M %d/%m/%Y') }}</small>
+        </div>
+        <span class="badge bg-warning text-dark">Chờ xác nhận</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <tbody>
+            {% for item in order.order_details %}
+            <tr>
+              <td>{{ item.dish.name }}</td>
+              <td class="text-center">{{ item.quantity }} x {{ item.unit_price|vnd }}</td>
+              <td class="text-end">{{ (item.unit_price * item.quantity)|vnd }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="cart-total">
+        <span>Tổng:</span>
+        <strong>{{ order.total_amount|vnd }}</strong>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
+    <a href="{{ url_for('cart.my_orders') }}" class="btn btn-hero">Xem hóa đơn của tôi</a>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-primary">Về trang chủ</a>
+  </div>
+
+  {% else %}
+  <div class="payment-icon payment-failed">&#10007;</div>
+  <h2 class="section-title">Thanh toán không thành công</h2>
+  <p class="section-subtitle">
+    {% if status == 'CANCELLED' %}
+    Giao dịch đã bị hủy. Bạn có thể thử lại bất cứ lúc nào.
+    {% elif status == 'FAILED' %}
+    Giao dịch thất bại. Vui lòng kiểm tra thẻ/tài khoản hoặc thử lại.
+    {% else %}
+    Hệ thống chưa xác nhận được trạng thái giao dịch. Vui lòng kiểm tra lại sau.
+    {% endif %}
+  </p>
+  <p class="text-muted small">Trạng thái: {{ status }}</p>
+
+  <div class="d-flex gap-2 justify-content-center flex-wrap">
+    <a href="{{ url_for('cart.checkout_view') }}" class="btn btn-hero">Thử lại</a>
+    <a href="{{ url_for('cart.cart_view') }}" class="btn btn-outline-secondary">Về giỏ hàng</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

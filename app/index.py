@@ -1,45 +1,25 @@
-from flask import request, jsonify, session, render_template, redirect, url_for, flash
-from flask_login import login_user, logout_user, current_user, login_required
-from app import utils, login, create_app
-
-
-@login.user_loader
-def load_user(user_id):
-    return #dao.get_user_by_id(user_id)
+from flask import render_template
 
 
 def register_routers(app):
-    login.login_view = 'login_view'
+
+    def _vnd(value):
+        return f"{value:,.0f}".replace(",", ".") + "đ"
+
+    app.jinja_env.filters['vnd'] = _vnd
 
     @app.route('/')
     def index():
-        return render_template('index.html')
+        from app.models import Restaurant, RestaurantStatus
 
+        try:
+            restaurants = (
+                Restaurant.query
+                .filter(Restaurant.status == RestaurantStatus.APPROVED,
+                        Restaurant.active == True)
+                .all()
+            )
+        except Exception:
+            restaurants = []
 
-    @app.route('/login')
-    def login_view():
-        return render_template('login.html')
-
-    @app.route('/login', methods=['POST'])
-    def login_process():
-       return
-
-    @app.route('/register')
-    def register_view():
-        return render_template('register.html')
-
-    @app.route('/register', methods=['POST'])
-    def register_process():
-        return
-
-    @app.route('/logout')
-    def logout_process():
-        logout_user()
-        return redirect('/login')
-
-
-app = create_app()
-register_routers(app=app)
-
-if __name__ == '__main__':
-    app.run(debug=True)
+        return render_template('index.html', restaurants=restaurants)

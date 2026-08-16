@@ -1,0 +1,94 @@
+1. Thông tin dự án
+Tên dự án: HỆ THỐNG ĐẶT MÓN ĂN TRỰC TUYẾN
+Mã dự án): Nhom17
+Người yêu cầu dự án: Thầy Nguyễn Trung Hậu
+Người phê duyệt dự án: Thầy Nguyễn Trung Hậu
+2. Mục tiêu dự án
+Xây dựng một website đặt món ăn trực tuyến phục vụ mục đích học tập và thực hành môn học.
+Áp dụng các kiến thức về phân tích thiết kế hệ thống, cơ sở dữ liệu và lập trình web.
+Hoàn thành đầy đủ các chức năng cơ bản như quản lý tài khoản, quản lý món ăn, đặt món và quản lý đơn hàng.
+Hoàn thành dự án đúng tiến độ học kỳ và đáp ứng các yêu cầu của môn học.
+Tích hợp các tính năng thông minh (gợi ý món ăn, dự đoán món ăn đi kèm, phân tích bình luận) ở mức độ phù hợp với thời gian và nguồn lực của nhóm.
+3. Phạm vi dự án
+Đăng ký, đăng nhập và quản lý tài khoản.
+Hiển thị danh mục nhà hàng, món ăn.
+Tìm kiếm và lọc nhà hàng có món ăn khách hàng mong muốn sử dụng
+Giỏ hàng và đặt món.
+Thanh toán trực tuyến qua cổng thanh toán payOS (không hỗ trợ thanh toán khi nhận hàng).
+Sau khi khách hàng nhấn xác nhận đặt hàng, hệ thống cho phép hủy đơn miễn phí trong vòng 10 giây trước khi chuyển hướng sang cổng thanh toán; hết thời gian này, hệ thống không hỗ trợ hủy đơn qua thao tác của khách hàng. Trường hợp nhà hàng phải hủy đơn đã thanh toán do lý do ngoài quy trình chuẩn (hết nguyên liệu, quá tải...), nhà hàng tự liên hệ và hoàn tiền trực tiếp cho khách hàng, nằm ngoài phạm vi xử lý tự động của hệ thống.
+Khoảng cách giao đơn tính theo đường chim bay (công thức Haversine) dựa trên tọa độ GPS thực tế lấy qua trình duyệt của nhà hàng/khách hàng, không geocode từ chuỗi địa chỉ văn bản. Bán kính giao hàng mặc định 10km, tùy chỉnh theo từng nhà hàng.
+Theo dõi trạng thái đơn hàng.
+Quản lý món ăn, danh mục và đơn hàng cho quản trị viên.
+Đăng nhập bằng 2 phương thức: tài khoản nội bộ (tên đăng nhập/mật khẩu) hoặc liên kết với dịch vụ đăng nhập bên ngoài do người dùng tự chọn; có cơ chế bảo mật tài khoản (mã hóa mật khẩu, giới hạn số lần đăng nhập sai).
+Nhà hàng tự đăng ký, cập nhật địa chỉ và thông tin; nhà hàng có thể tắt (ẩn) món ăn khi hết hàng.
+Tìm kiếm bằng một ô từ khóa duy nhất, áp dụng đồng thời cho tên nhà hàng và tên món ăn; hiển thị 20-30 kết quả mỗi trang, cho phép người dùng tùy chọn tiêu chí sắp xếp/phân hạng.
+Giỏ hàng gắn liền với tài khoản đã đăng nhập (mọi thao tác với giỏ hàng yêu cầu đăng nhập); mỗi giỏ hàng chỉ áp dụng cho một nhà hàng duy nhất; món trong giỏ vẫn hiển thị bình thường khi chưa thanh toán, hệ thống chỉ kiểm tra và thông báo món đã hết tại thời điểm tiến hành thanh toán.
+Nhà hàng xác nhận đơn hàng trong khoảng thời gian mặc định 5 phút (có thể tùy chỉnh theo từng nhà hàng); nếu không xác nhận đúng hạn, đơn hàng tự động bị hủy; nếu xác nhận thành công, đơn hàng chuyển sang trạng thái đang chuẩn bị.
+Tích hợp các tính năng thông minh: gợi ý món ăn cá nhân hóa bằng mô hình học máy quy mô nhỏ; dự đoán món ăn đi kèm bằng luật kết hợp (association rules); phân tích cảm xúc bình luận/đánh giá bằng Gemini API.
+Các ràng buộc nghiệp vụ (giá trị tối thiểu/tối đa như số lượng món, giá trị đơn hàng…) có giá trị mặc định do hệ thống thiết lập, cho phép quản trị viên/nhà hàng tùy chỉnh.
+Quản trị viên có trang quản lý (dashboard) riêng để giám sát nhà hàng, thực đơn và đơn hàng.
+Lưu trữ dữ liệu bằng Database.
+4. Các bên liên quan chính
+Tên
+Vai trò
+Tổ chức/Phòng ban
+Liên hệ
+Thầy Nguyễn Trung Hậu
+Khách hàng
+Trần Văn Trạng
+Project Manager
+Phạm Tấn Thành
+Full-Stack Developer
+Phạm Tuấn Anh
+Full-Stack  Developer
+5. Kế hoạch sơ bộ
+Mốc thời gian chính:
+- Ngày bắt đầu: 26/6/2026
+- Ngày kết thúc dự kiến: 4/9/2026
+Các mốc quan trọng (Milestones) dự kiến:
+- M0: Hoàn thành Project Charter, WBS và thiết kế hệ thống (Use Case, Class Diagram, ERD) – 10/7/2026
+- M1: Hoàn thành module Đăng ký/Đăng nhập và Tìm kiếm nhà hàng – 24/7/2026
+- M2: Hoàn thành module Thực đơn và Giỏ hàng – 7/8/2026
+- M3: Hoàn thành module Đặt hàng, Thanh toán và Xác nhận đơn (phía nhà hàng) – 21/8/2026
+- M4: Hoàn thành các tính năng thông minh (gợi ý món, dự đoán món kèm, phân tích bình luận) – 28/8/2026
+- M5: Kiểm thử tích hợp, hoàn thiện báo cáo và demo – 4/9/2026
+Ngân sách ước tính: Không phát sinh chi phí đáng kể; sử dụng các dịch vụ/công cụ miễn phí (Gemini API gói miễn phí, MySQL/Python mã nguồn mở, GitHub Student Developer Pack). Demo chạy cục bộ (localhost); nếu cần deploy công khai (để webhook payOS hoạt động), dùng Oracle Cloud Free Tier (miễn phí vĩnh viễn) hoặc Azure for Students (100$ credit, không cần thẻ) — không dùng DigitalOcean vì ưu đãi sinh viên đã ngừng từ 8/2026.
+Tài nguyên dự kiến sử dụng:
+Nhóm 3 sinh viên.
+Máy tính cá nhân.
+Python
+MySQL hoặc SQL Server.
+GitHub để quản lý mã nguồn.
+AI coding assistant hỗ trợ phát triển, dùng chung file README.md ở gốc mã nguồn làm ngữ cảnh cố định (quyết định kiến trúc, quy tắc nghiệp vụ đã chốt) để tránh xung đột và lặp lại lỗi giữa các thành viên.
+6. Rủi ro và giả định ban đầu
+• Giả định (Assumptions):Người dung đã có hạ tầng hệ thống, đã có năng lực sử dụng hệ thống từ trước
+Thiết bị và phần mềm phục vụ phát triển hoạt động ổn định.
+Yêu cầu của đề tài không thay đổi nhiều trong quá trình thực hiện.
+Thông tin nhà hàng (địa chỉ, thực đơn) do nhà hàng tự cung cấp và được xem là chính xác tại thời điểm nhập.
+Phạm vi áp dụng AI (mô hình học máy quy mô nhỏ, luật kết hợp, Gemini API) đã được khách hàng (giảng viên) thông qua như giải pháp phù hợp với nguồn lực và thời gian của đồ án.
+Chính sách hủy đơn/hoàn tiền đã được khách hàng (giảng viên) chốt: hệ thống chỉ cho trường hợp khách hàng hủy trong vòng 10 giây sau khi xác nhận đặt hàng (trước khi thanh toán thực sự diễn ra); các trường hợp hủy đơn đã thanh toán do nhà hàng  sẽ do nhà hàng tự liên hệ và hoàn tiền trực tiếp cho khách hàng, không thuộc phạm vi xử lý của hệ thống.
+• Rủi ro (Risks):Thành viên không hoàn thành công việc đúng hạn.
+Mất dữ liệu hoặc xung đột mã nguồn khi làm việc nhóm.
+Tính năng phân tích bình luận phụ thuộc Gemini API (dịch vụ bên thứ ba) và kết nối Internet; có thể gián đoạn khi mất mạng hoặc hết hạn mức miễn phí lúc demo.
+Tính năng đăng nhập qua dịch vụ bên ngoài phụ thuộc nhà cung cấp OAuth; có thể gặp lỗi cấu hình hoặc thay đổi chính sách.
+Thiếu dữ liệu lịch sử thực tế (cold-start) để mô hình gợi ý món ăn hoạt động hiệu quả; cần dữ liệu mẫu (seed data) để minh họa.
+Khối lượng công việc của 3 tính năng AI (gợi ý món, dự đoán món kèm, phân tích bình luận) có thể vượt quá thời gian cho phép nếu không kiểm soát chặt phạm vi kỹ thuật.
+Cổng thanh toán payOS không có môi trường thử nghiệm (sandbox); mọi giao dịch trong quá trình phát triển và demo đều là giao dịch thật (dùng số tiền nhỏ để giảm rủi ro).
+Tính năng tính khoảng cách giao hàng phụ thuộc quyền truy cập vị trí (GPS) của trình duyệt; có thể không hoạt động nếu người dùng từ chối cấp quyền hoặc thiết bị/trình duyệt không hỗ trợ định vị.
+7. Tiêu chí thành công
+Hoàn thành đúng thời gian theo kế hoạch môn học.
+Thực hiện đầy đủ các chức năng đã đề ra.
+Triển khai đầy đủ 3 tính năng thông minh (gợi ý món ăn, dự đoán món ăn đi kèm, phân tích bình luận) ở mức độ đã thống nhất với khách hàng (mô hình học máy nhỏ/luật kết hợp/Gemini API, không bắt buộc deep learning tự huấn luyện).
+Báo cáo, tài liệu và slide đầy đủ.
+8. Phê duyệt
+Người lập
+Vai trò
+Ký tên
+Ngày
+Thầy Nguyễn  Trung Hậu
+Nhà tài trợ dự án
+__________
+___/___/2025
+Trần Văn Trạng
+Quản lý dự án
+26/6/2026

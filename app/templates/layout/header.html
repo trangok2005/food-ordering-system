@@ -1,5 +1,5 @@
 <nav class="navbar">
-  <div class="container d-flex justify-content-between align-items-center">
+  <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
     <a
       class="navbar-brand"
       href="{% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}/admin{% else %}/{% endif %}">
@@ -8,14 +8,15 @@
         class="img-fluid"
         alt="Logo" />
 
-      <span>Sushi Trạng Quỳnh</span>
+      <span>TvT-food</span>
     </a>
+
 
     <div class="d-flex align-items-center gap-3">
       {% if current_user.is_authenticated %}
       <span class="text-white fw-bold">Chào, {{ current_user.username }}</span>
-      {% if current_user.role.name == 'USER' %}
-      <a href="/my-orders" class="btn btn-outline-info btn-sm"
+      {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
+      <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
         >Hóa đơn của tôi</a
       >
       {% endif %}

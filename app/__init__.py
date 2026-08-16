@@ -1,6 +1,6 @@
-from flask import Flask
+from flask import Flask, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 import cloudinary
 from dotenv import load_dotenv
 import os
@@ -31,6 +31,39 @@ def create_app():
 
     db.init_app(app)
     login.init_app(app)
+    login.login_view = 'auth.login_view'
+
+    from app.auth import auth_bp
+    app.register_blueprint(auth_bp)
+
+    from app.browse import browse_bp
+    app.register_blueprint(browse_bp)
+
+    from app.cart import cart_bp
+    app.register_blueprint(cart_bp)
+
+    from app import index
+    index.register_routers(app)
+
+    @app.context_processor
+    def inject_common():
+        from app.models import Category
+        from app.cart import dao as cart_dao
+        try:
+            categories = Category.query.all()
+        except Exception:
+            categories = []
+        try:
+            if current_user.is_authenticated:
+                cart_stats = cart_dao.get_cart_stats(current_user.id)
+            else:
+                cart_stats = {'total_quantity': 0, 'total_amount': 0}
+        except Exception:
+            cart_stats = {'total_quantity': 0, 'total_amount': 0}
+        return {
+            'categories': categories,
+            'cart_stats': cart_stats,
+        }
 
     return app
 

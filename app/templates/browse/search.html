@@ -1,0 +1,88 @@
+{% extends 'layout/base.html' %}
+{% block title %}Tìm Kiếm | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="search-header">
+  <h2 class="section-title">Tìm Kiếm</h2>
+  <form class="search-bar" action="{{ url_for('browse.search_view') }}" method="get" role="search">
+    <input
+      class="form-control"
+      type="search"
+      name="q"
+      value="{{ keyword }}"
+      placeholder="Tìm nhà hàng hoặc món ăn..."
+      aria-label="Tìm kiếm" />
+    <button class="btn btn-hero" type="submit">Tìm</button>
+  </form>
+</section>
+
+{% if not keyword %}
+<div class="empty-state"><p>Nhập từ khóa để tìm nhà hàng hoặc món ăn.</p></div>
+{% elif results %}
+<div class="section-header">
+  <p class="section-subtitle">
+    Tìm thấy {{ pagination.total }} kết quả cho "{{ keyword }}"
+  </p>
+</div>
+
+<div class="row g-4">
+  {% for restaurant, matched in results %}
+  <div class="col-md-6 col-lg-4">
+    <div class="restaurant-card">
+      <div class="restaurant-body">
+        <h3 class="restaurant-name">{{ restaurant.name }}</h3>
+        <p class="restaurant-desc">{{ restaurant.description }}</p>
+        <p class="restaurant-address">&#128205; {{ restaurant.address }}</p>
+
+        {% if matched %}
+        <div class="restaurant-dishes">
+          {% for dish in matched %}
+          <div class="dish-row">
+            <span class="dish-name">{{ dish.name }}</span>
+            <span class="dish-price">{{ dish.price|vnd }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-1">Không có món khớp từ khóa.</p>
+        {% endif %}
+
+        <div class="restaurant-actions">
+          <a
+            href="{{ url_for('browse.restaurant_menu_view', restaurant_id=restaurant.id) }}"
+            class="btn btn-outline-primary btn-sm">Xem thực đơn</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% if pagination.pages > 1 %}
+<nav class="mt-4 d-flex justify-content-center">
+  <ul class="pagination">
+    <li class="page-item {{ 'disabled' if not pagination.has_prev }}">
+      <a
+        class="page-link"
+        href="{{ url_for('browse.search_view', q=keyword, page=pagination.prev_num) if pagination.has_prev else '#' }}"
+        >&laquo;</a>
+    </li>
+    {% for p in range(1, pagination.pages + 1) %}
+    <li class="page-item {{ 'active' if p == pagination.page }}">
+      <a class="page-link" href="{{ url_for('browse.search_view', q=keyword, page=p) }}">{{ p }}</a>
+    </li>
+    {% endfor %}
+    <li class="page-item {{ 'disabled' if not pagination.has_next }}">
+      <a
+        class="page-link"
+        href="{{ url_for('browse.search_view', q=keyword, page=pagination.next_num) if pagination.has_next else '#' }}"
+        >&raquo;</a>
+    </li>
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="empty-state"><p>Không tìm thấy kết quả cho "{{ keyword }}".</p></div>
+{% endif %}
+{% endblock %}

@@ -6,7 +6,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import enum
-from app import db, create_app
+from app import db
 
 
 class BaseModel(db.Model):
@@ -15,15 +15,14 @@ class BaseModel(db.Model):
     active = Column(Boolean, default=True)
 
 
-
 # ĐĂNG KÝ / ĐĂNG NHẬP / QUẢN LÝ TÀI KHOẢN
 #    - 2 phương thức đăng nhập: nội bộ (username/password) và OAuth
-#      (Google/Facebook...) qua bảng OAuthAccount.
+#      (Google) qua bảng OAuthAccount.
 #    - Bảo mật: mật khẩu được hash (werkzeug), giới hạn số lần đăng
 #      nhập sai bằng failed_login_count + locked_until.
 
-
 class UserRole(enum.Enum):
+    USER = 'User'
     CUSTOMER = 'Customer'
     RESTAURANT = 'Restaurant'
     ADMIN = 'Admin'
@@ -44,7 +43,7 @@ class User(BaseModel, UserMixin):
     avatar = Column(String(255))
     role = Column(Enum(UserRole), default=UserRole.CUSTOMER, nullable=False)
 
-    # moot ti security
+    # bảo mật đăng nhập
     failed_login_count = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
 
@@ -81,14 +80,14 @@ class OAuthAccount(BaseModel):
     __tablename__ = 'oauth_account'
 
     provider = Column(Enum(AuthProvider), nullable=False)
-    provider_uid = Column(String(255), nullable=False)   # id từ gg
+    provider_uid = Column(String(255), nullable=False)   # id từ Google
 
     user_id = Column(Integer, ForeignKey(User.id), nullable=False)
 
     __table_args__ = (
         db.UniqueConstraint('provider', 'provider_uid', name='uq_provider_uid'),
+        db.UniqueConstraint('user_id', 'provider', name='uq_user_provider'),
     )
-
 
 
 # 2. NHÀ HÀNG / THỰC ĐƠN
@@ -96,7 +95,6 @@ class OAuthAccount(BaseModel):
 #    - Dish.is_available: nhà hàng tự bật/tắt món khi hết hàng.
 #    - confirm_timeout_minutes: mặc định 5 phút, cho phép mỗi nhà
 #      hàng tùy chỉnh.
-
 
 class RestaurantStatus(enum.Enum):
     PENDING = 'Pending'
@@ -109,21 +107,38 @@ class Restaurant(BaseModel):
 
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    address = Column(String(255), nullable=False)
+    address = Column(String(255), nullable=False)   # chỉ để HIỂN THỊ, không dùng để tính khoảng cách
     phone = Column(String(11))
     logo = Column(String(255))
+
+    # tọa độ GPS thật, lấy 1 lần lúc đăng ký qua navigator.geolocation của
+    # trình duyệt (nhà hàng bấm "Dùng vị trí hiện tại") - dùng để tính
+    # khoảng cách đường chim bay (Haversine), KHÔNG geocode từ chuỗi địa
+    # chỉ vì geocode địa chỉ tiếng Việt qua Nominatim không đáng tin cậy.
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
 
     is_open = Column(Boolean, default=True)
     status = Column(Enum(RestaurantStatus), default=RestaurantStatus.PENDING)
 
     confirm_timeout_minutes = Column(Integer, default=5)
-    min_order_amount = Column(Float, nullable=True)    #ghi dè
+    min_order_amount = Column(Float, nullable=True)          # ghi đè giá trị mặc định của hệ thống
+    delivery_radius_km = Column(Float, default=10)           # bán kính giao hàng, tùy chỉnh theo nhà hàng
 
     owner_id = Column(Integer, ForeignKey(User.id), nullable=False)
 
     categories = relationship('Category', backref='restaurant', lazy=True, cascade='all, delete-orphan')
     dishes = relationship('Dish', backref='restaurant', lazy=True, cascade='all, delete-orphan')
     orders = relationship('Order', backref='restaurant', lazy=True)
+
+    def is_within_delivery_radius(self, lat, lng):
+        """Kiểm tra tọa độ (lat, lng) có nằm trong bán kính giao hàng của
+        nhà hàng không. Trả về True nếu nhà hàng chưa có tọa độ (tránh
+        chặn nhầm khi dữ liệu chưa đầy đủ)."""
+        if self.latitude is None or self.longitude is None:
+            return True
+        distance = haversine_km(self.latitude, self.longitude, lat, lng)
+        return distance <= (self.delivery_radius_km or 10)
 
     def __str__(self):
         return self.name
@@ -150,7 +165,7 @@ class Dish(BaseModel):
 
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    price = Column(Float, default=0, nullable=False)
+    price = Column(Integer, default=0, nullable=False)
     image = Column(String(255))
     is_available = Column(Boolean, default=True)     # ẩn món khi hết hàng, KHÔNG xóa khỏi giỏ hàng cũ
 
@@ -166,15 +181,14 @@ class Dish(BaseModel):
         return self.name
 
 
-
 # 3. GIỎ HÀNG
 #    - Gắn với tài khoản đã đăng nhập (user_id NOT NULL).
-#    - Mỗi cart chỉ thuộc 1 nhà hàng (UNIQUE user_id + restaurant_id):
-#      khi user thêm món từ nhà hàng khác, tầng service sẽ hỏi xác
-#      nhận trước khi tạo cart mới / xóa cart cũ.
+#    - Mỗi cart chỉ thuộc 1 nhà hàng. Ràng buộc UNIQUE là cặp
+#      (user_id, restaurant_id) chứ KHÔNG phải riêng user_id, vì một
+#      user có thể có nhiều cart ở các thời điểm khác nhau (nhưng
+#      không được có 2 cart cùng lúc cho cùng 1 nhà hàng).
 #    - Món hết hàng vẫn hiển thị trong giỏ, chỉ được kiểm tra và
 #      chặn ở bước thanh toán.
-
 
 class Cart(BaseModel):
     __tablename__ = 'cart'
@@ -208,13 +222,12 @@ class CartItem(BaseModel):
     )
 
 
-
 # 4 & 5. ĐẶT HÀNG / THANH TOÁN / XÁC NHẬN ĐƠN (phía nhà hàng)
 #    - confirm_deadline = created_date + restaurant.confirm_timeout_minutes.
 #    - Nếu quá hạn chưa confirm -> job nền chuyển status = EXPIRED.
 #    - unit_price lưu snapshot giá tại thời điểm đặt (đề phòng nhà
 #      hàng đổi giá món về sau).
-
+#    - Chỉ hỗ trợ thanh toán trực tuyến (đã bỏ COD).
 
 class OrderStatus(enum.Enum):
     PENDING = 'Pending'            # vừa đặt, chờ nhà hàng xác nhận
@@ -226,7 +239,6 @@ class OrderStatus(enum.Enum):
     EXPIRED = 'Expired'            # nhà hàng không xác nhận kịp hạn -> tự động hủy
 
 class PaymentMethod(enum.Enum):
-    COD = 'Cash on Delivery'
     ONLINE = 'Online Payment'
 
 class PaymentStatus(enum.Enum):
@@ -240,19 +252,32 @@ class Order(BaseModel):
     __tablename__ = 'order'
 
     created_date = Column(DateTime, default=datetime.now)
-    delivery_address = Column(String(255), nullable=False)
+    delivery_address = Column(String(255), nullable=False)   # chỉ để HIỂN THỊ/in đơn
+    delivery_latitude = Column(Float, nullable=True)         # tọa độ GPS thật lúc checkout
+    delivery_longitude = Column(Float, nullable=True)        # dùng để tính khoảng cách, KHÔNG geocode
     phone = Column(String(11), nullable=False)
     note = Column(String(255))
 
     total_amount = Column(Float, default=0)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
 
-    payment_method = Column(Enum(PaymentMethod), default=PaymentMethod.COD, nullable=False)
+    payment_method = Column(Enum(PaymentMethod), default=PaymentMethod.ONLINE, nullable=False)
     payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.UNPAID, nullable=False)
     paid_at = Column(DateTime, nullable=True)
 
     confirm_deadline = Column(DateTime, nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
+
+    # Hủy đơn: chỉ áp dụng cho trường hợp nhà hàng hủy đơn đã thanh toán
+    # do lý do ngoài quy trình chuẩn (hết nguyên liệu, quá tải...).
+    # Việc hoàn tiền do nhà hàng TỰ LIÊN HỆ và thực hiện trực tiếp với
+    # khách hàng, NẰM NGOÀI phạm vi xử lý của hệ thống (quyết định đã
+    # được giảng viên chốt - xem Project Charter, mục Giả định).
+    # Trường hợp khách hàng tự hủy trong 10 giây sau khi nhấn "Đặt hàng"
+    # KHÔNG tạo Order (hủy trước khi redirect sang cổng thanh toán), nên
+    # không cần xử lý gì thêm ở đây.
+    cancel_reason = Column(String(255), nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
 
     user_id = Column(Integer, ForeignKey(User.id), nullable=False)
     restaurant_id = Column(Integer, ForeignKey(Restaurant.id), nullable=False)
@@ -268,6 +293,20 @@ class Order(BaseModel):
                 and self.confirm_deadline is not None
                 and datetime.now() > self.confirm_deadline)
 
+    def cancel_by_restaurant(self, reason):
+        """Nhà hàng hủy đơn đã thanh toán do lý do ngoài quy trình chuẩn.
+        Chỉ cập nhật trạng thái và lý do; KHÔNG gọi API hoàn tiền nào -
+        nhà hàng tự liên hệ và hoàn tiền trực tiếp cho khách hàng."""
+        self.status = OrderStatus.CANCELLED
+        self.cancel_reason = reason
+        self.cancelled_at = datetime.now()
+
+    def mark_refunded_manually(self):
+        """Đánh dấu đã hoàn tiền, dùng SAU KHI nhà hàng đã tự chuyển
+        khoản hoàn tiền cho khách ngoài hệ thống. Chỉ để lưu vết/đối
+        soát nội bộ, không gọi API chuyển tiền thật."""
+        self.payment_status = PaymentStatus.REFUNDED
+
     def __str__(self):
         return f"Order #{self.id}"
 
@@ -278,7 +317,7 @@ class OrderDetail(BaseModel):
     order_id = Column(Integer, ForeignKey(Order.id), nullable=False)
     dish_id = Column(Integer, ForeignKey(Dish.id), nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
-    unit_price = Column(Float, nullable=False)     # snapshot giá dish.price tại thời điểm đặt
+    unit_price = Column(Integer, nullable=False)     # snapshot giá dish.price tại thời điểm đặt
 
 
 # 6. TÍNH NĂNG THÔNG MINH (AI)
@@ -299,16 +338,20 @@ class SentimentLabel(enum.Enum):
 class Review(BaseModel):
     __tablename__ = 'review'
 
-    rating = Column(Integer, nullable=False)     # 1-5 sao
+    rating = Column(Integer, nullable=False)
     comment = Column(Text)
     created_date = Column(DateTime, default=datetime.now)
 
     sentiment_label = Column(Enum(SentimentLabel), nullable=True)   # kết quả Gemini API
-    sentiment_score = Column(Float, nullable=True)                  # -1..1
+    sentiment_score = Column(Float, nullable=True)
 
     user_id = Column(Integer, ForeignKey(User.id), nullable=False)
     dish_id = Column(Integer, ForeignKey(Dish.id), nullable=True)
     order_id = Column(Integer, ForeignKey(Order.id), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint('rating >= 1 AND rating <= 5', name='chk_rating_range'),
+    )
 
 
 class DishPairing(BaseModel):
@@ -324,6 +367,7 @@ class DishPairing(BaseModel):
 
     __table_args__ = (
         db.UniqueConstraint('dish_id', 'paired_dish_id', name='uq_dish_pair'),
+        db.CheckConstraint('dish_id != paired_dish_id', name='chk_different_dishes'),
     )
 
 
@@ -335,7 +379,6 @@ class UserDishInteraction(BaseModel):
     interaction_type = Column(String(20), default='VIEW')   # VIEW / ADD_TO_CART / ORDER
     hour_of_day = Column(Integer)          # 0-23
     created_date = Column(DateTime, default=datetime.now)
-
 
 
 # CẤU HÌNH HỆ THỐNG
@@ -356,175 +399,3 @@ class SystemConfig(db.Model):
         if not cfg:
             return default
         return cast(cfg.value)
-
-
-if __name__ == '__main__':
-    app = create_app()
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-
-        # ---------- Cấu hình hệ thống mặc định ----------
-        configs = [
-            SystemConfig(key='DEFAULT_CONFIRM_TIMEOUT_MINUTES', value='5',
-                         description='Thời gian mặc định để nhà hàng xác nhận đơn'),
-            SystemConfig(key='DEFAULT_MIN_ORDER_AMOUNT', value='20000',
-                         description='Giá trị đơn hàng tối thiểu mặc định'),
-            SystemConfig(key='MAX_QUANTITY_PER_ITEM', value='20',
-                         description='Số lượng tối đa cho 1 món trong giỏ hàng'),
-            SystemConfig(key='SEARCH_PAGE_SIZE', value='24',
-                         description='Số kết quả tìm kiếm mỗi trang (20-30)'),
-        ]
-        db.session.add_all(configs)
-        db.session.commit()
-
-        # ---------- Tài khoản ----------
-        admin = User(username='admin', email='admin@foodapp.vn',
-                     full_name='Quản trị viên', phone='0901234567',
-                     address='Quận 1, TP.HCM', role=UserRole.ADMIN)
-        admin.set_password('123456')
-
-        owner1 = User(username='sushihouse_owner', email='owner1@foodapp.vn',
-                      full_name='Nguyễn Văn Chủ', phone='0909111222',
-                      address='Quận 3, TP.HCM', role=UserRole.RESTAURANT)
-        owner1.set_password('123456')
-
-        owner2 = User(username='comtam_owner', email='owner2@foodapp.vn',
-                      full_name='Trần Thị Chủ', phone='0909333444',
-                      address='Quận 5, TP.HCM', role=UserRole.RESTAURANT)
-        owner2.set_password('123456')
-
-        cus1 = User(username='nguyenvana', email='vana@gmail.com',
-                    full_name='Nguyễn Văn A', phone='0988888888',
-                    address='Tân Bình, TP.HCM', role=UserRole.CUSTOMER)
-        cus1.set_password('123456')
-
-        cus2 = User(username='lethib', email='thib@gmail.com',
-                    full_name='Lê Thị B', phone='0977777777',
-                    address='Thủ Đức, TP.HCM', role=UserRole.CUSTOMER)
-        cus2.set_password('123456')
-
-        db.session.add_all([admin, owner1, owner2, cus1, cus2])
-        db.session.commit()
-
-        # đăng nhập ngoài (OAuth) minh họa cho cus1
-        db.session.add(OAuthAccount(provider=AuthProvider.GOOGLE,
-                                     provider_uid='109283746510293',
-                                     user_id=cus1.id))
-        db.session.commit()
-
-        # ---------- Nhà hàng ----------
-        r1 = Restaurant(name='Sushi House', description='Sushi & Sashimi tươi mỗi ngày',
-                        address='12 Nguyễn Huệ, Q1', phone='0281111111',
-                        status=RestaurantStatus.APPROVED, confirm_timeout_minutes=5,
-                        owner_id=owner1.id)
-        r2 = Restaurant(name='Cơm Tấm Sài Gòn', description='Cơm tấm sườn bì chả truyền thống',
-                        address='45 Lê Lợi, Q1', phone='0282222222',
-                        status=RestaurantStatus.APPROVED, confirm_timeout_minutes=10,
-                        owner_id=owner2.id)
-        db.session.add_all([r1, r2])
-        db.session.commit()
-
-        # ---------- Danh mục & Món ăn ----------
-        c1 = Category(name='Sashimi', restaurant_id=r1.id)
-        c2 = Category(name='Nigiri', restaurant_id=r1.id)
-        c3 = Category(name='Nước uống', restaurant_id=r1.id)
-        c4 = Category(name='Cơm', restaurant_id=r2.id)
-        c5 = Category(name='Nước uống', restaurant_id=r2.id)
-        db.session.add_all([c1, c2, c3, c4, c5])
-        db.session.commit()
-
-        dishes = [
-            Dish(name='Cá hồi Sashimi', description='Cá hồi tươi thái lát kèm wasabi',
-                 price=120000.0, image='https://picsum.photos/seed/sashimi1/400',
-                 is_available=True, restaurant_id=r1.id, category_id=c1.id),
-            Dish(name='Nigiri Cá Hồi', description='Sushi cá hồi trên nền cơm dấm Nhật',
-                 price=39000.0, image='https://picsum.photos/seed/nigiri1/400',
-                 is_available=True, restaurant_id=r1.id, category_id=c2.id),
-            Dish(name='Nigiri Tôm', description='Sushi tôm luộc tươi ngọt',
-                 price=49000.0, image='https://picsum.photos/seed/nigiri2/400',
-                 is_available=False, restaurant_id=r1.id, category_id=c2.id),   # đã hết hàng -> ẩn
-            Dish(name='Coca Cola', description='Lon 330ml',
-                 price=16000.0, image='https://picsum.photos/seed/coca/400',
-                 is_available=True, restaurant_id=r1.id, category_id=c3.id),
-            Dish(name='Cơm Tấm Sườn Bì Chả', description='Sườn nướng, bì, chả trứng',
-                 price=45000.0, image='https://picsum.photos/seed/comtam1/400',
-                 is_available=True, restaurant_id=r2.id, category_id=c4.id),
-            Dish(name='Cơm Tấm Sườn Nướng', description='Sườn nướng mật ong',
-                 price=40000.0, image='https://picsum.photos/seed/comtam2/400',
-                 is_available=True, restaurant_id=r2.id, category_id=c4.id),
-            Dish(name='Trà đá', description='Trà đá miễn phí kèm ly to',
-                 price=5000.0, image='https://picsum.photos/seed/trada/400',
-                 is_available=True, restaurant_id=r2.id, category_id=c5.id),
-        ]
-        db.session.add_all(dishes)
-        db.session.commit()
-        salmon_sashimi, nigiri_salmon, nigiri_shrimp, coca, comtam1, comtam2, trada = dishes
-
-        # ---------- Giỏ hàng (cus2 đang có giỏ tại Cơm Tấm Sài Gòn) ----------
-        cart2 = Cart(user_id=cus2.id, restaurant_id=r2.id)
-        db.session.add(cart2)
-        db.session.commit()
-        db.session.add_all([
-            CartItem(cart_id=cart2.id, dish_id=comtam1.id, quantity=2),
-            CartItem(cart_id=cart2.id, dish_id=trada.id, quantity=2),
-        ])
-        db.session.commit()
-
-        # ---------- Đơn hàng mẫu ----------
-        order1 = Order(delivery_address='12 Nguyễn Huệ, Q1', phone='0988888888',
-                       total_amount=salmon_sashimi.price + nigiri_salmon.price,
-                       status=OrderStatus.COMPLETED,
-                       payment_method=PaymentMethod.ONLINE, payment_status=PaymentStatus.PAID,
-                       paid_at=datetime.now() - timedelta(days=1),
-                       user_id=cus1.id, restaurant_id=r1.id)
-        db.session.add(order1)
-        db.session.commit()
-        order1.set_confirm_deadline()
-        order1.confirmed_at = order1.created_date + timedelta(minutes=3)
-        db.session.commit()
-
-        db.session.add_all([
-            OrderDetail(order_id=order1.id, dish_id=salmon_sashimi.id, quantity=1,
-                       unit_price=salmon_sashimi.price),
-            OrderDetail(order_id=order1.id, dish_id=nigiri_salmon.id, quantity=1,
-                       unit_price=nigiri_salmon.price),
-        ])
-        db.session.commit()
-
-        # đơn thứ 2 đang chờ nhà hàng xác nhận (minh họa yêu cầu 5)
-        order2 = Order(delivery_address='Thủ Đức, TP.HCM', phone='0977777777',
-                       total_amount=comtam2.price, status=OrderStatus.PENDING,
-                       payment_method=PaymentMethod.COD, payment_status=PaymentStatus.UNPAID,
-                       user_id=cus2.id, restaurant_id=r2.id)
-        db.session.add(order2)
-        db.session.commit()
-        order2.set_confirm_deadline()
-        db.session.commit()
-        db.session.add(OrderDetail(order_id=order2.id, dish_id=comtam2.id, quantity=1,
-                                    unit_price=comtam2.price))
-        db.session.commit()
-
-        # ---------- Đánh giá + phân tích cảm xúc (AI) ----------
-        db.session.add(Review(rating=5, comment='Cá hồi rất tươi, sẽ ủng hộ tiếp!',
-                              sentiment_label=SentimentLabel.POSITIVE, sentiment_score=0.92,
-                              user_id=cus1.id, dish_id=salmon_sashimi.id, order_id=order1.id))
-        db.session.commit()
-
-        # ---------- Luật kết hợp món ăn kèm (AI) ----------
-        db.session.add(DishPairing(dish_id=salmon_sashimi.id, paired_dish_id=nigiri_salmon.id,
-                                   support=0.35, confidence=0.7))
-        db.session.commit()
-
-        # ---------- Log hành vi phục vụ gợi ý cá nhân hóa (AI) ----------
-        db.session.add_all([
-            UserDishInteraction(user_id=cus1.id, dish_id=salmon_sashimi.id,
-                                interaction_type='ORDER', hour_of_day=19),
-            UserDishInteraction(user_id=cus1.id, dish_id=nigiri_salmon.id,
-                                interaction_type='ORDER', hour_of_day=19),
-            UserDishInteraction(user_id=cus2.id, dish_id=comtam1.id,
-                                interaction_type='ADD_TO_CART', hour_of_day=11),
-        ])
-        db.session.commit()
-
-        print('Khởi tạo CSDL và dữ liệu mẫu thành công!')
