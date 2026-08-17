@@ -1,5 +1,11 @@
 from flask import Blueprint
 
-cart_bp = Blueprint('cart', __name__, url_prefix='/cart')
+
+cart_bp = Blueprint(
+    'cart',
+    __name__,
+    url_prefix='/cart'
+)
+
 
 from app.cart import router
