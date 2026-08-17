@@ -69,10 +69,12 @@ def seed_database():
         r1 = Restaurant(name='Sushi House', description='Sushi & Sashimi tuoi moi ngay',
                         address='12 Nguyen Hue, Q1', phone='0281111111',
                         status=RestaurantStatus.APPROVED, confirm_timeout_minutes=5,
+                        latitude=10.7769, longitude=106.7009, delivery_radius_km=5,
                         owner_id=owner1.id)
         r2 = Restaurant(name='Com Tam Sai Gon', description='Com tam suong bi cha truyen thong',
                         address='45 Le Loi, Q1', phone='0282222222',
                         status=RestaurantStatus.APPROVED, confirm_timeout_minutes=10,
+                        latitude=10.7765, longitude=106.6997, delivery_radius_km=8,
                         owner_id=owner2.id)
         db.session.add_all([r1, r2])
         db.session.commit()

@@ -114,8 +114,9 @@
           </div>
           <hr />
           <p class="text-muted small mb-3">
-            Thanh toán trực tuyến qua <strong>payOS</strong>. Sau khi bấm nút bên dưới, bạn có
-            <strong>10 giây</strong> để hủy miễn phí.
+            Thanh toán trực tuyến qua <strong>payOS</strong>. Bạn sẽ được chuyển sang
+            cổng thanh toán ngay sau khi bấm nút. Đơn hàng chỉ được tạo khi
+            thanh toán thành công.
           </p>
           <button
             type="button"
@@ -131,21 +132,6 @@
       </div>
     </div>
   </form>
-
-  <div class="modal fade" id="countdownModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-body text-center p-4">
-          <div class="countdown-number" id="countdown-number">10</div>
-          <p class="mb-1 fw-bold">Đang chuẩn bị thanh toán...</p>
-          <p class="text-muted small mb-3">
-            Bạn có thể hủy miễn phí trong 10 giây. Hết thời gian, hệ thống sẽ chuyển sang cổng thanh toán payOS.
-          </p>
-          <button type="button" id="cancel-countdown" class="btn btn-outline-danger">Hủy đơn (miễn phí)</button>
-        </div>
-      </div>
-    </div>
-  </div>
   {% else %}
   <div class="empty-state">
     <p>Giỏ hàng trống.</p>

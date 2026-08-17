@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import enum
 from app import db
+from app.utils import haversine_km
 
 
 class BaseModel(db.Model):
@@ -124,6 +125,7 @@ class Restaurant(BaseModel):
     confirm_timeout_minutes = Column(Integer, default=5)
     min_order_amount = Column(Float, nullable=True)          # ghi đè giá trị mặc định của hệ thống
     delivery_radius_km = Column(Float, default=10)           # bán kính giao hàng, tùy chỉnh theo nhà hàng
+    max_quantity_per_item = Column(Integer, nullable=True)   # ghi đè số lượng tối đa 1 món/đơn (mặc định hệ thống)
 
     owner_id = Column(Integer, ForeignKey(User.id), nullable=False)
 
@@ -139,6 +141,13 @@ class Restaurant(BaseModel):
             return True
         distance = haversine_km(self.latitude, self.longitude, lat, lng)
         return distance <= (self.delivery_radius_km or 10)
+
+    def distance_km_to(self, lat, lng):
+        """Khoảng cách thực tế từ nhà hàng đến (lat, lng). Trả về None
+        nếu nhà hàng chưa có tọa độ GPS."""
+        if self.latitude is None or self.longitude is None or lat is None or lng is None:
+            return None
+        return haversine_km(self.latitude, self.longitude, lat, lng)
 
     def __str__(self):
         return self.name
@@ -273,9 +282,9 @@ class Order(BaseModel):
     # Việc hoàn tiền do nhà hàng TỰ LIÊN HỆ và thực hiện trực tiếp với
     # khách hàng, NẰM NGOÀI phạm vi xử lý của hệ thống (quyết định đã
     # được giảng viên chốt - xem Project Charter, mục Giả định).
-    # Trường hợp khách hàng tự hủy trong 10 giây sau khi nhấn "Đặt hàng"
-    # KHÔNG tạo Order (hủy trước khi redirect sang cổng thanh toán), nên
-    # không cần xử lý gì thêm ở đây.
+    # Order chỉ được tạo SAU KHI payOS xác nhận thanh toán PAID; nếu
+    # khách hủy/không thanh toán thì không tạo đơn nên không cần xử lý
+    # hủy gì ở đây.
     cancel_reason = Column(String(255), nullable=True)
     cancelled_at = Column(DateTime, nullable=True)
 

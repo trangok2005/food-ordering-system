@@ -13,12 +13,35 @@ from app.models import (
     SystemConfig
 )
 
+class CartRestaurantConflict(ValueError):
+    """Giỏ hàng đang chứa món của nhà hàng khác."""
+
+    def __init__(self, current_restaurant, dish_id, quantity):
+        self.current_restaurant = current_restaurant
+        self.dish_id = dish_id
+        self.quantity = quantity
+        super().__init__(
+            f'Giỏ hàng đang chứa món của '
+            f'{current_restaurant.name}, muốn thêm món nhà hàng khác '
+            f'phải xóa giỏ cũ trước'
+        )
+
+
 def _max_quantity_per_item():
     return SystemConfig.get(
         'MAX_QUANTITY_PER_ITEM',
         20,
         cast=int
     )
+
+def _max_quantity_for_dish(dish):
+    """Số lượng tối đa 1 món/đơn: ưu tiên ghi đè riêng của nhà hàng,
+    không có thì dùng mặc định hệ thống."""
+    restaurant = dish.restaurant if dish else None
+    if restaurant and restaurant.max_quantity_per_item:
+        return restaurant.max_quantity_per_item
+    return _max_quantity_per_item()
+
 
 def get_cart(user_id, restaurant_id):
     return (
@@ -62,6 +85,22 @@ def add_to_cart(user_id, dish_id, quantity=1):
     if not dish or not dish.active or not dish.is_available:
         raise ValueError('Món ăn không khả dụng')
 
+    other_cart = (
+        Cart.query
+        .filter(
+            Cart.user_id == user_id,
+            Cart.restaurant_id != dish.restaurant_id
+        )
+        .first()
+    )
+
+    if other_cart:
+        raise CartRestaurantConflict(
+            other_cart.restaurant,
+            dish_id,
+            quantity
+        )
+
     cart = get_cart(
         user_id,
         dish.restaurant_id
@@ -76,20 +115,9 @@ def add_to_cart(user_id, dish_id, quantity=1):
         db.session.add(cart)
         db.session.flush()
 
-    item = (
-        CartItem.query
-        .filter_by(
-            cart_id=cart.id,
-            dish_id=dish.id
-        )
-        .first()
-    )
-
-    new_qty = quantity + (
-        item.quantity if item else 0
-    )
-
-    max_qty = _max_quantity_per_item()
+    item = CartItem.query.filter_by(cart_id=cart.id, dish_id=dish.id).first()
+    new_qty = quantity + (item.quantity if item else 0)
+    max_qty = _max_quantity_for_dish(dish)
 
     if new_qty > max_qty:
         raise ValueError(
@@ -116,17 +144,14 @@ def update_cart_item(user_id, cart_item_id, quantity):
     if not quantity or quantity < 1:
         raise ValueError('Số lượng không hợp lệ')
 
-    max_qty = _max_quantity_per_item()
-
-    if quantity > max_qty:
-        raise ValueError(
-            f'Mỗi món chỉ được đặt tối đa {max_qty} phần'
-        )
-
     item = CartItem.query.get(cart_item_id)
 
     if not item or item.cart.user_id != user_id:
         raise ValueError('Sản phẩm không có trong giỏ')
+
+    max_qty = _max_quantity_for_dish(item.dish)
+    if quantity > max_qty:
+        raise ValueError(f'Mỗi món chỉ được đặt tối đa {max_qty} phần')
 
     item.quantity = quantity
 
@@ -159,6 +184,15 @@ def clear_cart(user_id, cart_id):
         raise ValueError('Giỏ hàng không tồn tại')
 
     cart.items.clear()
+    db.session.commit()
+
+
+def clear_all_carts(user_id):
+    carts = get_user_carts(user_id)
+
+    for cart in carts:
+        db.session.delete(cart)
+
     db.session.commit()
 
 
@@ -215,15 +249,12 @@ def validate_checkout(user_id, lat=None, lng=None):
                 )
 
         if lat is not None and lng is not None:
-            if not restaurant.is_within_delivery_radius(
-                lat,
-                lng
-            ):
+            distance = restaurant.distance_km_to(lat, lng)
+            if not restaurant.is_within_delivery_radius(lat, lng):
                 issues.append(
-                    f"Địa chỉ giao hàng nằm ngoài "
-                    f"bán kính phục vụ "
-                    f"({restaurant.delivery_radius_km:.0f}km) "
-                    f"của {restaurant.name}"
+                    f"Địa chỉ giao hàng cách {restaurant.name} "
+                    f"{distance:.1f}km, ngoài bán kính phục vụ "
+                    f"({restaurant.delivery_radius_km:.0f}km)"
                 )
 
     return issues

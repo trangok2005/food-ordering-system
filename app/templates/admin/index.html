@@ -1,0 +1,111 @@
+{% extends 'layout/base.html' %}
+{% block title %}Tổng Quan Quản Trị | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">Trang Quản Trị</h2>
+  <p class="restaurant-hero-desc">Tổng quan hệ thống đặt món</p>
+  <p class="restaurant-address">&#128100; {{ current_user.full_name or current_user.username }}</p>
+</section>
+
+{% include 'admin/_nav.html' %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#127869;</div>
+      <h3>{{ stats.restaurant_count }}</h3>
+      <p class="text-muted mb-0">Nhà hàng</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128100;</div>
+      <h3>{{ stats.user_count }}</h3>
+      <p class="text-muted mb-0">Khách hàng</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128221;</div>
+      <h3>{{ stats.order_count }}</h3>
+      <p class="text-muted mb-0">Đơn hàng</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128176;</div>
+      <h3>{{ stats.revenue|vnd }}</h3>
+      <p class="text-muted mb-0">Doanh thu (đã giao)</p>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Nhà hàng chờ duyệt</h3>
+        <a href="{{ url_for('admin.restaurants_view') }}" class="btn btn-outline-primary btn-sm">Quản lý</a>
+      </div>
+      {% if pending %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <tbody>
+            {% for restaurant in pending %}
+            <tr>
+              <td>
+                <strong>{{ restaurant.name }}</strong>
+                <small class="d-block text-muted">{{ restaurant.owner.full_name or restaurant.owner.username }}</small>
+              </td>
+              <td>{{ restaurant.phone or 'Chưa có SĐT' }}</td>
+              <td class="text-end">
+                <form method="post" action="{{ url_for('admin.approve_restaurant_view', restaurant_id=restaurant.id) }}">
+                  <button class="btn btn-success btn-sm" type="submit">Duyệt</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><p>Không có nhà hàng nào chờ duyệt.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Đơn gần đây</h3>
+        <span class="text-muted small">{{ stats.paid_count }} đơn đã thanh toán</span>
+      </div>
+      {% if recent_orders %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <tbody>
+            {% for order in recent_orders %}
+            <tr>
+              <td>
+                <strong>Đơn #{{ order.id }}</strong>
+                <small class="d-block text-muted">{{ order.restaurant.name }}</small>
+              </td>
+              <td class="text-end">{{ order.total_amount|vnd }}</td>
+              <td class="text-end">
+                <span class="badge bg-{{ {'PENDING': 'warning text-dark', 'COMPLETED': 'success', 'CANCELLED': 'secondary', 'EXPIRED': 'dark'}.get(order.status.name, 'info') }}">
+                  {{ order.status.value }}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><p>Chưa có đơn hàng nào.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

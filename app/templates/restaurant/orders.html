@@ -1,0 +1,164 @@
+{% extends 'layout/base.html' %}
+{% block title %}Quản Lý Đơn Hàng | {{ restaurant.name }}{% endblock %}
+
+{% block content %}
+{% set status_map = {
+  'PENDING':    ('Chờ xác nhận',  'warning text-dark'),
+  'CONFIRMED':  ('Đã xác nhận',   'info'),
+  'PREPARING':  ('Đang chuẩn bị', 'info'),
+  'DELIVERING': ('Đang giao',     'primary'),
+  'COMPLETED':  ('Hoàn thành',    'success'),
+  'CANCELLED':  ('Đã hủy',        'secondary'),
+  'EXPIRED':    ('Quá hạn xác nhận', 'dark'),
+} %}
+
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
+  <p class="restaurant-hero-desc">Quản lý và xử lý đơn hàng</p>
+  <p class="restaurant-address">
+    Thời gian xác nhận: <strong>{{ restaurant.confirm_timeout_minutes }} phút</strong>
+    &middot; &#128205; {{ restaurant.address }}
+  </p>
+</section>
+
+{% include 'restaurant/_nav.html' %}
+
+<ul class="nav nav-pills mb-4 flex-wrap gap-1">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if not current_status }}"
+       href="{{ url_for('restaurant.orders_view') }}">
+      Tất cả <span class="badge bg-light text-dark">{{ counts.values()|sum }}</span>
+    </a>
+  </li>
+  {% for member in statuses %}
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if current_status == member }}"
+       href="{{ url_for('restaurant.orders_view', status=member.name) }}">
+      {{ status_map[member.name][0] }}
+      <span class="badge bg-light text-dark">{{ counts.get(member, 0) }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+
+{% if orders %}
+{% for order in orders %}
+{% set label, badge = status_map.get(order.status.name, (order.status.name, 'secondary')) %}
+<div class="cart-card mb-3" id="order-{{ order.id }}">
+  <div class="cart-card-header flex-wrap">
+    <div>
+      <h3 class="cart-restaurant mb-0">Đơn #{{ order.id }}</h3>
+      <small class="text-muted">
+        Khách: <strong>{{ order.user.full_name or order.user.username }}</strong>
+        &middot; {{ order.created_date.strftime('%H:%M %d/%m/%Y') }}
+        {% if order.status.name == 'PENDING' and order.confirm_deadline %}
+        &middot; Hạn xác nhận: {{ order.confirm_deadline.strftime('%H:%M %d/%m/%Y') }}
+        {% endif %}
+      </small>
+    </div>
+    <span class="badge bg-{{ badge }}">&#9679; {{ label }}</span>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <tbody>
+        {% for item in order.order_details %}
+        <tr>
+          <td>{{ item.dish.name }}</td>
+          <td class="text-center">{{ item.quantity }} x {{ item.unit_price|vnd }}</td>
+          <td class="text-end">{{ (item.unit_price * item.quantity)|vnd }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="order-meta px-3 py-2 text-muted small">
+    <div>&#128205; {{ order.delivery_address }}</div>
+    <div>&#128222; {{ order.phone }}</div>
+    {% if order.note %}<div>&#128221; {{ order.note }}</div>{% endif %}
+    <div>
+      Thanh toán: {{ order.payment_status.value }}
+      {% if order.paid_at %}&middot; lúc {{ order.paid_at.strftime('%H:%M %d/%m/%Y') }}{% endif %}
+    </div>
+    {% if order.cancel_reason %}
+    <div class="text-danger">Lý do hủy: {{ order.cancel_reason }}</div>
+    {% endif %}
+  </div>
+
+  <div class="cart-total flex-wrap justify-content-between">
+    <div class="d-flex flex-wrap gap-2">
+      {% if order.status.name == 'PENDING' %}
+      <form method="post" action="{{ url_for('restaurant.confirm_order', order_id=order.id) }}">
+        <button class="btn btn-success btn-sm" type="submit">Xác nhận đơn</button>
+      </form>
+      <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
+              data-bs-target="#cancelModal-{{ order.id }}">Hủy đơn</button>
+
+      {% elif order.status.name == 'CONFIRMED' %}
+      <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <button class="btn btn-info btn-sm" type="submit">Bắt đầu chuẩn bị</button>
+      </form>
+      <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
+              data-bs-target="#cancelModal-{{ order.id }}">Hủy đơn</button>
+
+      {% elif order.status.name == 'PREPARING' %}
+      <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <button class="btn btn-primary btn-sm" type="submit">Giao hàng</button>
+      </form>
+      <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
+              data-bs-target="#cancelModal-{{ order.id }}">Hủy đơn</button>
+
+      {% elif order.status.name == 'DELIVERING' %}
+      <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <button class="btn btn-success btn-sm" type="submit">Hoàn thành</button>
+      </form>
+      <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
+              data-bs-target="#cancelModal-{{ order.id }}">Hủy đơn</button>
+
+      {% elif order.status.name == 'CANCELLED' and order.payment_status != PaymentStatus.REFUNDED %}
+      <form method="post" action="{{ url_for('restaurant.mark_refunded', order_id=order.id) }}"
+            onsubmit="return confirm('Xác nhận bạn đã tự hoàn tiền cho khách NGOÀI hệ thống?')">
+        <button class="btn btn-outline-warning btn-sm" type="submit">Đánh dấu đã hoàn tiền</button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span>Tổng:</span>
+      <strong>{{ order.total_amount|vnd }}</strong>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cancelModal-{{ order.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="post" action="{{ url_for('restaurant.cancel_order', order_id=order.id) }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Hủy đơn #{{ order.id }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-3">
+            Đơn đã thanh toán. Việc hoàn tiền do nhà hàng tự liên hệ và thực hiện trực tiếp với
+            khách hàng, <strong>ngoài hệ thống</strong>.
+          </p>
+          <label class="form-label" for="reason-{{ order.id }}">Lý do hủy <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="reason-{{ order.id }}" name="reason" rows="2"
+                    placeholder="Ví dụ: hết nguyên liệu, quá tải..." required></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Thoát</button>
+          <button type="submit" class="btn btn-danger">Xác nhận hủy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="empty-state">
+  <p>{% if current_status %}Không có đơn ở trạng thái này.{% else %}Chưa có đơn hàng nào.{% endif %}</p>
+</div>
+{% endif %}
+{% endblock %}

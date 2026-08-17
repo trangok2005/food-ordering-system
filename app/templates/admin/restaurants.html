@@ -1,0 +1,91 @@
+{% extends 'layout/base.html' %}
+{% block title %}Duyệt Nhà Hàng | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">Duyệt Nhà Hàng</h2>
+  <p class="restaurant-hero-desc">Phê duyệt đăng ký mới và quản lý trạng thái nhà hàng</p>
+</section>
+
+{% include 'admin/_nav.html' %}
+
+{% set status_badge = {
+  'PENDING': ('warning text-dark', 'Chờ duyệt'),
+  'APPROVED': ('success', 'Đã duyệt'),
+  'LOCKED': ('danger', 'Bị khóa'),
+} %}
+
+<ul class="nav nav-pills mb-4 flex-wrap gap-1">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if not current_status }}"
+       href="{{ url_for('admin.restaurants_view') }}">Tất cả</a>
+  </li>
+  {% for member in statuses %}
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if current_status == member }}"
+       href="{{ url_for('admin.restaurants_view', status=member.name) }}">
+      {{ status_badge[member.name][1] }}
+    </a>
+  </li>
+  {% endfor %}
+</ul>
+
+{% if restaurants %}
+<div class="table-responsive">
+  <table class="table align-middle bg-white rounded">
+    <thead>
+      <tr>
+        <th>Nhà hàng</th>
+        <th>Chủ nhà hàng</th>
+        <th>Điện thoại</th>
+        <th>Địa chỉ</th>
+        <th>Trạng thái</th>
+        <th class="text-end">Thao tác</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for restaurant in restaurants %}
+      <tr>
+        <td>
+          <strong>{{ restaurant.name }}</strong>
+          <small class="d-block text-muted">{{ restaurant.description or '' }}</small>
+        </td>
+        <td>{{ restaurant.owner.full_name or restaurant.owner.username }}</td>
+        <td>{{ restaurant.phone or 'Chưa có SĐT' }}</td>
+        <td>{{ restaurant.address }}</td>
+        <td>
+          <span class="badge bg-{{ status_badge[restaurant.status.name][0] }}">
+            {{ status_badge[restaurant.status.name][1] }}
+          </span>
+        </td>
+        <td class="text-end">
+          <div class="d-flex justify-content-end gap-1">
+            {% if restaurant.status.name == 'PENDING' %}
+            <form method="post" action="{{ url_for('admin.approve_restaurant_view', restaurant_id=restaurant.id) }}">
+              <button class="btn btn-success btn-sm" type="submit">Duyệt</button>
+            </form>
+            {% endif %}
+
+            {% if restaurant.status.name == 'APPROVED' %}
+            <form method="post" action="{{ url_for('admin.lock_restaurant_view', restaurant_id=restaurant.id) }}"
+                  onsubmit="return confirm('Khóa nhà hàng {{ restaurant.name }}?')">
+              <button class="btn btn-outline-danger btn-sm" type="submit">Khóa</button>
+            </form>
+            {% endif %}
+
+            {% if restaurant.status.name == 'LOCKED' %}
+            <form method="post" action="{{ url_for('admin.unlock_restaurant_view', restaurant_id=restaurant.id) }}">
+              <button class="btn btn-outline-success btn-sm" type="submit">Mở khóa</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><p>Không có nhà hàng nào.</p></div>
+{% endif %}
+{% endblock %}

@@ -42,6 +42,12 @@ def create_app():
     from app.cart import cart_bp
     app.register_blueprint(cart_bp)
 
+    from app.restaurant import restaurant_bp
+    app.register_blueprint(restaurant_bp)
+
+    from app.admin import admin_bp
+    app.register_blueprint(admin_bp)
+
     from app import index
     index.register_routers(app)
 

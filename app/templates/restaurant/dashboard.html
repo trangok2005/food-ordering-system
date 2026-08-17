@@ -1,0 +1,116 @@
+{% extends 'layout/base.html' %}
+{% block title %}Tổng Quan | {{ restaurant.name }}{% endblock %}
+
+{% block content %}
+{% set badge = {
+  'PENDING': ('warning text-dark', 'Chờ xác nhận'),
+  'CONFIRMED': ('info', 'Đã xác nhận'),
+  'PREPARING': ('info', 'Đang chuẩn bị'),
+  'DELIVERING': ('primary', 'Đang giao'),
+  'COMPLETED': ('success', 'Hoàn thành'),
+  'CANCELLED': ('secondary', 'Đã hủy'),
+  'EXPIRED': ('dark', 'Quá hạn'),
+} %}
+
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
+  <p class="restaurant-hero-desc">{{ restaurant.description or 'Trang quản lý nhà hàng' }}</p>
+  <p class="restaurant-address">
+    <span class="badge bg-{{ 'success' if restaurant.is_open else 'secondary' }}">
+      {{ 'Đang mở cửa' if restaurant.is_open else 'Đang đóng cửa' }}
+    </span>
+    &middot; &#128205; {{ restaurant.address }} &middot; &#128222; {{ restaurant.phone or 'Chưa có SĐT' }}
+  </p>
+</section>
+
+{% include 'restaurant/_nav.html' %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#9201;</div>
+      <h3>{{ stats.counts.get('PENDING', 0) }}</h3>
+      <p class="text-muted mb-0">Chờ xác nhận</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#127836;</div>
+      <h3>{{ stats.counts.get('PREPARING', 0) + stats.counts.get('CONFIRMED', 0) }}</h3>
+      <p class="text-muted mb-0">Đang chuẩn bị</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128666;</div>
+      <h3>{{ stats.counts.get('DELIVERING', 0) }}</h3>
+      <p class="text-muted mb-0">Đang giao</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128176;</div>
+      <h3>{{ stats.revenue|vnd }}</h3>
+      <p class="text-muted mb-0">Doanh thu (đã giao)</p>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Đơn gần đây</h3>
+        <a href="{{ url_for('restaurant.orders_view') }}" class="btn btn-outline-primary btn-sm">Xem tất cả</a>
+      </div>
+      {% if orders %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <tbody>
+            {% for order in orders %}
+            {% set cls, label = badge.get(order.status.name, ('secondary', order.status.name)) %}
+            <tr>
+              <td>
+                <strong>Đơn #{{ order.id }}</strong>
+                <small class="d-block text-muted">{{ order.created_date.strftime('%H:%M %d/%m/%Y') }}</small>
+              </td>
+              <td>{{ order.user.full_name or order.user.username }}</td>
+              <td class="text-end">{{ order.total_amount|vnd }}</td>
+              <td class="text-end"><span class="badge bg-{{ cls }}">{{ label }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><p>Chưa có đơn hàng nào.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Cấu hình hiện tại</h3>
+        <a href="{{ url_for('restaurant.settings_view') }}" class="btn btn-outline-primary btn-sm">Chỉnh sửa</a>
+      </div>
+      <div class="order-meta px-3 py-2 small">
+        <div>Giá trị đơn tối thiểu:
+          <strong>{{ (restaurant.min_order_amount|string + 'đ') if restaurant.min_order_amount else 'Mặc định hệ thống' }}</strong></div>
+        <div>Thời gian xác nhận: <strong>{{ restaurant.confirm_timeout_minutes }} phút</strong></div>
+        <div>Bán kính giao hàng:
+          <strong>{{ (restaurant.delivery_radius_km|string + ' km') if restaurant.delivery_radius_km else 'Mặc định 10 km' }}</strong></div>
+        <div>Số lượng tối đa 1 món/đơn:
+          <strong>{{ restaurant.max_quantity_per_item or 'Mặc định hệ thống (20)' }}</strong></div>
+        {% if restaurant.latitude is not none and restaurant.longitude is not none %}
+        <div>Tọa độ GPS:
+          <strong>{{ '%.6f'|format(restaurant.latitude) }}, {{ '%.6f'|format(restaurant.longitude) }}</strong></div>
+        {% else %}
+        <div>Tọa độ GPS:
+          <strong class="text-danger">Chưa đặt — khoảng cách giao hàng không được kiểm tra</strong></div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

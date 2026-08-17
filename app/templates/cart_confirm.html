@@ -1,0 +1,36 @@
+{% extends 'layout/base.html' %}
+{% block title %}Xác nhận đổi nhà hàng | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="cart-page">
+  <h2 class="section-title">Giỏ hàng đang có món nhà hàng khác</h2>
+
+  <div class="cart-card">
+    <div class="empty-state">
+      <p>
+        Giỏ hàng của bạn đang chứa món của
+        <strong>{{ current_restaurant.name }}</strong>.
+      </p>
+      <p>Mỗi giỏ hàng chỉ được đặt từ một nhà hàng duy nhất.</p>
+      <p>Bạn có muốn xóa giỏ hiện tại để thêm món từ nhà hàng này không?</p>
+    </div>
+
+    <div class="cart-checkout">
+      <form method="post" action="{{ url_for('cart.confirm_switch') }}">
+        <input type="hidden" name="dish_id" value="{{ dish_id }}" />
+        <input type="hidden" name="quantity" value="{{ quantity }}" />
+        <input type="hidden" name="return_url" value="{{ return_url or '' }}" />
+        <button class="btn btn-hero" type="submit">
+          Xóa giỏ cũ và thêm món mới
+        </button>
+      </form>
+
+      <a
+        href="{{ url_for('cart.cart_view') }}"
+        class="btn btn-outline-primary">
+        Giữ giỏ hiện tại
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

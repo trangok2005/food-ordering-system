@@ -1,0 +1,147 @@
+{% extends 'layout/base.html' %}
+{% block title %}Cấu Hình Nhà Hàng | {{ restaurant.name }}{% endblock %}
+
+{% block content %}
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
+  <p class="restaurant-hero-desc">Cấu hình hoạt động của nhà hàng</p>
+</section>
+
+{% include 'restaurant/_nav.html' %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <form method="post" class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Thông tin &amp; cấu hình</h3>
+      </div>
+
+      <div class="p-4">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="is_open" id="is_open"
+                     value="on" {{ 'checked' if restaurant.is_open }} />
+              <label class="form-check-label" for="is_open">
+                Nhà hàng đang <strong>mở cửa</strong> nhận đơn
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="phone">Số điện thoại</label>
+            <input class="form-control" type="tel" id="phone" name="phone"
+                   value="{{ restaurant.phone or '' }}" pattern="[0-9]{10,11}" />
+          </div>
+
+          <div class="col-12">
+            <label class="form-label" for="description">Mô tả nhà hàng</label>
+            <textarea class="form-control" id="description" name="description" rows="2"
+                      placeholder="Giới thiệu ngắn về nhà hàng...">{{ restaurant.description or '' }}</textarea>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="min_order_amount">
+              Giá trị đơn tối thiểu (đ) <span class="text-muted">— để trống dùng mặc định hệ thống</span>
+            </label>
+            <input class="form-control" type="number" id="min_order_amount"
+                   name="min_order_amount" min="0" step="1000"
+                   value="{{ restaurant.min_order_amount if restaurant.min_order_amount is not none else '' }}" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="confirm_timeout_minutes">
+              Thời gian xác nhận đơn (phút) <span class="text-danger">*</span>
+            </label>
+            <input class="form-control" type="number" id="confirm_timeout_minutes"
+                   name="confirm_timeout_minutes" min="1" required
+                   value="{{ restaurant.confirm_timeout_minutes }}" />
+            <div class="form-text">Quá thời gian này, đơn chưa xác nhận sẽ tự động hủy (EXPIRED).</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="delivery_radius_km">
+              Bán kính giao hàng (km) <span class="text-muted">— để trống dùng mặc định 10 km</span>
+            </label>
+            <input class="form-control" type="number" id="delivery_radius_km"
+                   name="delivery_radius_km" min="0.5" step="0.5"
+                   value="{{ restaurant.delivery_radius_km if restaurant.delivery_radius_km is not none else '' }}" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="max_quantity_per_item">
+              Số lượng tối đa 1 món/đơn <span class="text-muted">— để trống dùng mặc định hệ thống (20)</span>
+            </label>
+            <input class="form-control" type="number" id="max_quantity_per_item"
+                   name="max_quantity_per_item" min="1"
+                   value="{{ restaurant.max_quantity_per_item if restaurant.max_quantity_per_item is not none else '' }}" />
+          </div>
+
+          <div class="col-12 mt-3">
+            <hr />
+            <h5 class="mb-3">Vị trí giao hàng</h5>
+            <p class="text-muted small">
+              Dùng để tính khoảng cách giao hàng (haversine). Nhấn
+              <strong>"Dùng vị trí hiện tại"</strong> để tự điền tọa độ nơi bạn đặt nhà hàng,
+              hoặc nhập tay kinh độ/vĩ độ.
+            </p>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="latitude">Vĩ độ (latitude)</label>
+            <input class="form-control" type="number" id="latitude" name="latitude"
+                   step="any" min="-90" max="90"
+                   value="{{ restaurant.latitude if restaurant.latitude is not none else '' }}" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="longitude">Kinh độ (longitude)</label>
+            <input class="form-control" type="number" id="longitude" name="longitude"
+                   step="any" min="-180" max="180"
+                   value="{{ restaurant.longitude if restaurant.longitude is not none else '' }}" />
+          </div>
+
+          <div class="col-12">
+            <button type="button" id="use-location" class="btn btn-outline-primary btn-sm">
+              &#128205; Dùng vị trí hiện tại
+            </button>
+            <small id="location-status" class="text-muted ms-2"></small>
+          </div>
+        </div>
+      </div>
+
+      <div class="cart-total">
+        <button type="submit" class="btn btn-hero">Lưu cấu hình</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const btn = document.getElementById("use-location");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      document.getElementById("location-status").textContent = "Trình duyệt không hỗ trợ định vị.";
+      return;
+    }
+    const status = document.getElementById("location-status");
+    status.textContent = "Đang xác định vị trí...";
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        document.getElementById("latitude").value = pos.coords.latitude;
+        document.getElementById("longitude").value = pos.coords.longitude;
+        status.textContent = "Đã lấy vị trí nhà hàng.";
+      },
+      () => {
+        status.textContent = "Không lấy được vị trí. Bạn có thể nhập tay kinh độ/vĩ độ.";
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
+    );
+  });
+})();
+</script>
+{% endblock %}

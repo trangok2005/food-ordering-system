@@ -27,11 +27,14 @@
             <p class="dish-card-desc">{{ dish.description }}</p>
             <div class="dish-card-footer">
               <span class="dish-price">{{ dish.price|vnd }}</span>
+              {% if not current_user.is_authenticated or
+                    current_user.role.name in ['USER', 'CUSTOMER'] %}
               <form method="post" action="{{ url_for('cart.add_to_cart') }}">
                 <input type="hidden" name="dish_id" value="{{ dish.id }}" />
                 <input type="hidden" name="quantity" value="1" />
                 <button class="btn btn-primary btn-sm" type="submit">Thêm vào giỏ</button>
               </form>
+              {% endif %}
             </div>
           </div>
         </div>

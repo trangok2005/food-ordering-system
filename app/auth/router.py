@@ -24,10 +24,20 @@ def _google_configured():
                 and not _google_client_id().startswith('your_'))
 
 
+def _redirect_after_login(user):
+    """Nhà hàng đăng nhập xong nhảy thẳng vào trang quản lý nhà hàng,
+    admin vào trang quản trị, các vai trò khác về trang chủ."""
+    if user.role.name == 'RESTAURANT':
+        return url_for('restaurant.dashboard')
+    if user.role.name == 'ADMIN':
+        return url_for('admin.dashboard')
+    return url_for('index')
+
+
 @auth_bp.route('/login', methods=['GET'])
 def login_view():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(_redirect_after_login(current_user))
     return render_template('auth/login.html')
 
 
@@ -48,6 +58,10 @@ def login_process():
     user.reset_failed_login()
     db.session.commit()
 
+    if user.role.name == 'RESTAURANT':
+        return redirect(url_for('restaurant.dashboard'))
+    if user.role.name == 'ADMIN':
+        return redirect(url_for('admin.dashboard'))
     next_page = request.args.get('next')
     return redirect(next_page if next_page else url_for('index'))
 
@@ -55,7 +69,7 @@ def login_process():
 @auth_bp.route('/register', methods=['GET'])
 def register_view():
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect(_redirect_after_login(current_user))
     return render_template('auth/register.html')
 
 
@@ -162,6 +176,10 @@ def google_callback():
     user.reset_failed_login()
     db.session.commit()
 
+    if user.role.name == 'RESTAURANT':
+        return redirect(url_for('restaurant.dashboard'))
+    if user.role.name == 'ADMIN':
+        return redirect(url_for('admin.dashboard'))
     next_page = session.pop('oauth_next', '')
     return redirect(next_page if next_page else url_for('index'))
 

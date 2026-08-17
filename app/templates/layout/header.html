@@ -1,5 +1,5 @@
-<nav class="navbar">
-  <div class="container d-flex justify-content-between align-items-center flex-wrap gap-2">
+<nav class="navbar navbar-expand-lg">
+  <div class="container">
     <a
       class="navbar-brand"
       href="{% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}/admin{% else %}/{% endif %}">
@@ -7,34 +7,71 @@
         src="{{ url_for('static', filename='images/logo.png') }}"
         class="img-fluid"
         alt="Logo" />
-
       <span>TvT-food</span>
     </a>
 
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#mainNav"
+      aria-controls="mainNav"
+      aria-expanded="false"
+      aria-label="Chuyển hướng">
+      <span class="navbar-toggler-icon"></span>
+    </button>
 
-    <div class="d-flex align-items-center gap-3">
-      {% if current_user.is_authenticated %}
-      <span class="text-white fw-bold">Chào, {{ current_user.username }}</span>
-      {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
-      <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
-        >Hóa đơn của tôi</a
-      >
-      {% endif %}
-      <a href="/logout" class="btn btn-outline-danger btn-sm">Đăng xuất</a>
-      {% else %}
-      <a href="/login" class="btn btn btn-primary btn-sm">Đăng nhập</a>
-      <a href="/register" class="btn btn-primary btn-sm">Đăng ký</a>
-      {% endif %} {% if not current_user.is_authenticated or
-      current_user.role.name != "ADMIN" %}
-      <div class="nav-item">
-        <a class="nav-link text-success fs-4" href="/cart"
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item">
+          <a class="nav-link" href="/">Trang chủ</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="{{ url_for('browse.search_view') }}">Tìm món</a>
+        </li>
+      </ul>
+
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        {% if current_user.is_authenticated %}
+        <span class="text-white fw-bold">Chào, {{ current_user.username }}</span>
+
+        {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
+        <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
+          >Hóa đơn của tôi</a
+        >
+        {% elif current_user.role.name == 'RESTAURANT' %}
+        <a href="{{ url_for('restaurant.dashboard') }}" class="btn btn-outline-info btn-sm"
+          >Quản lý nhà hàng</a
+        >
+        {% elif current_user.role.name == 'ADMIN' %}
+        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-info btn-sm"
+          >Quản trị</a
+        >
+        {% endif %}
+
+        <a href="{{ url_for('auth.logout_process') }}" class="btn btn-outline-danger btn-sm"
+          >Đăng xuất</a
+        >
+        {% else %}
+        <a href="{{ url_for('auth.login_view') }}" class="btn btn-primary btn-sm"
+          >Đăng nhập</a
+        >
+        <a href="{{ url_for('auth.register_view') }}" class="btn btn-hero btn-sm"
+          >Đăng ký</a
+        >
+        {% endif %}
+
+        {% if not current_user.is_authenticated or
+              current_user.role.name in ['USER', 'CUSTOMER'] %}
+        <a class="nav-link text-success fs-4 position-relative" href="{{ url_for('cart.cart_view') }}"
           >&#128722;
-          <span class="badge bg-danger cart-counter" id="cartId"
-            >{{ cart_stats.total_quantity }}</span
-          >
+          <span
+            class="badge bg-danger cart-counter position-absolute top-0 start-100 translate-middle"
+            id="cartId"
+            data-endpoint="{{ url_for('cart.cart_stats_api') }}">{{ cart_stats.total_quantity }}</span>
         </a>
+        {% endif %}
       </div>
-      {% endif %}
     </div>
   </div>
 </nav>

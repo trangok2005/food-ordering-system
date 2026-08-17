@@ -1,23 +1,22 @@
 import secrets
 import time
+from urllib.parse import urlparse
 
-from flask import (
-    render_template,
-    request,
-    redirect,
-    url_for,
-    flash,
-    session
-)
+from flask import render_template, request, redirect, url_for, flash, session, abort, jsonify
+from flask_login import login_required, current_user
 
-from flask_login import (
-    login_required,
-    current_user
-)
 
 from app.cart import cart_bp
 from app.cart import dao
 from app.cart import payos
+
+
+@cart_bp.before_request
+def _block_restaurant_ordering():
+    """Tài khoản nhà hàng (RESTAURANT) chỉ quản lý đơn, KHÔNG được
+    thao tác giỏ hàng / thanh toán như khách hàng."""
+    if current_user.is_authenticated and current_user.role.name == 'RESTAURANT':
+        abort(403)
 
 
 def _gen_order_code():
@@ -302,6 +301,19 @@ def my_orders():
     )
 
 
+@cart_bp.route('/api/stats')
+@login_required
+def cart_stats_api():
+    """Trả về số lượng món trong giỏ hàng của user (để header badge)."""
+    stats = dao.get_cart_stats(
+        current_user.id
+    )
+
+    return jsonify(
+        stats
+    )
+
+
 @cart_bp.route(
     '/add',
     methods=['POST']
@@ -330,6 +342,22 @@ def add_to_cart():
             'Đã thêm vào giỏ hàng'
         )
 
+    except dao.CartRestaurantConflict as e:
+        referrer = request.referrer
+        return_path = (
+            urlparse(referrer).path
+            if referrer
+            else None
+        )
+
+        return render_template(
+            'cart_confirm.html',
+            current_restaurant=e.current_restaurant,
+            dish_id=dish_id,
+            quantity=quantity,
+            return_url=return_path
+        )
+
     except ValueError as e:
         flash(
             str(e),
@@ -338,6 +366,61 @@ def add_to_cart():
 
     return redirect(
         request.referrer
+        or url_for('cart.cart_view')
+    )
+
+
+@cart_bp.route(
+    '/confirm-switch',
+    methods=['POST']
+)
+@login_required
+def confirm_switch():
+    dish_id = request.form.get(
+        'dish_id',
+        type=int
+    )
+
+    quantity = request.form.get(
+        'quantity',
+        1,
+        type=int
+    )
+
+    return_url = request.form.get(
+        'return_url'
+    )
+
+    if not (
+        return_url
+        and return_url.startswith('/')
+        and not return_url.startswith('//')
+    ):
+        return_url = None
+
+    try:
+        dao.clear_all_carts(
+            current_user.id
+        )
+
+        dao.add_to_cart(
+            current_user.id,
+            dish_id,
+            quantity
+        )
+
+        flash(
+            'Đã xóa giỏ cũ và thêm món mới'
+        )
+
+    except ValueError as e:
+        flash(
+            str(e),
+            'error'
+        )
+
+    return redirect(
+        return_url
         or url_for('cart.cart_view')
     )
 

@@ -1,0 +1,142 @@
+{% extends 'layout/base.html' %}
+{% block title %}Thống Kê | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="restaurant-hero">
+  <h2 class="restaurant-hero-name">Thống Kê</h2>
+  <p class="restaurant-hero-desc">Số liệu kinh doanh toàn hệ thống</p>
+</section>
+
+{% include 'admin/_nav.html' %}
+
+<div class="row g-4 mb-4">
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128176;</div>
+      <h3>{{ stats.revenue|vnd }}</h3>
+      <p class="text-muted mb-0">Doanh thu (đã giao)</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128221;</div>
+      <h3>{{ stats.order_count }}</h3>
+      <p class="text-muted mb-0">Tổng đơn</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128179;</div>
+      <h3>{{ stats.paid_count }}</h3>
+      <p class="text-muted mb-0">Đơn đã thanh toán</p>
+    </div>
+  </div>
+  <div class="col-md-3 col-6">
+    <div class="feature-card text-center">
+      <div class="feature-icon">&#128202;</div>
+      <h3>{{ stats.avg_order|vnd }}</h3>
+      <p class="text-muted mb-0">Giá trị đơn TB</p>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Đơn theo trạng thái</h3>
+      </div>
+      {% set status_map = {
+        'PENDING': ('Chờ xác nhận', 'warning text-dark'),
+        'CONFIRMED': ('Đã xác nhận', 'info'),
+        'PREPARING': ('Đang chuẩn bị', 'info'),
+        'DELIVERING': ('Đang giao', 'primary'),
+        'COMPLETED': ('Hoàn thành', 'success'),
+        'CANCELLED': ('Đã hủy', 'secondary'),
+        'EXPIRED': ('Quá hạn', 'dark'),
+      } %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <tbody>
+            {% for member in OrderStatus %}
+            {% set label, badge = status_map.get(member.name, (member.name, 'secondary')) %}
+            <tr>
+              <td><span class="badge bg-{{ badge }}">{{ label }}</span></td>
+              <td class="text-end"><strong>{{ order_counts.get(member, 0) }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Nhà hàng có doanh thu cao nhất</h3>
+      </div>
+      {% if top_restaurants %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Nhà hàng</th>
+              <th class="text-center">Đơn</th>
+              <th class="text-end">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for restaurant, count, revenue in top_restaurants %}
+            <tr>
+              <td>{{ restaurant.name }}</td>
+              <td class="text-center">{{ count }}</td>
+              <td class="text-end">{{ revenue|vnd }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><p>Chưa có dữ liệu.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="cart-card">
+      <div class="cart-card-header">
+        <h3 class="cart-restaurant">Món ăn bán chạy nhất</h3>
+      </div>
+      {% if top_dishes %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Món</th>
+              <th>Nhà hàng</th>
+              <th class="text-center">Đã bán</th>
+              <th class="text-end">Doanh thu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for dish, qty, revenue in top_dishes %}
+            <tr>
+              <td>{{ dish.name }}</td>
+              <td>{{ dish.restaurant.name }}</td>
+              <td class="text-center">{{ qty }}</td>
+              <td class="text-end">{{ revenue|vnd }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><p>Chưa có dữ liệu.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

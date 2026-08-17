@@ -1,0 +1,14 @@
+<ul class="nav nav-tabs mb-4 flex-wrap">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'dashboard' }}"
+       href="{{ url_for('restaurant.dashboard') }}">Tổng quan</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'orders' }}"
+       href="{{ url_for('restaurant.orders_view') }}">Xử lý đơn hàng</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'settings' }}"
+       href="{{ url_for('restaurant.settings_view') }}">Cấu hình nhà hàng</a>
+  </li>
+</ul>

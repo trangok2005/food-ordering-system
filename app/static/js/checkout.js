@@ -1,48 +1,12 @@
-const COUNTDOWN_SECONDS = 10;
-
 (function () {
   const form = document.getElementById("checkout-form");
   if (!form) return;
 
   const confirmBtn = document.getElementById("confirm-order");
-  const modalEl = document.getElementById("countdownModal");
-  const countdownEl = document.getElementById("countdown-number");
-  const cancelBtn = document.getElementById("cancel-countdown");
   const useLocationBtn = document.getElementById("use-location");
   const locationStatus = document.getElementById("location-status");
   const latInput = document.getElementById("lat");
   const lngInput = document.getElementById("lng");
-
-  let timerId = null;
-  let modal = null;
-  if (window.bootstrap && modalEl) {
-    modal = new window.bootstrap.Modal(modalEl);
-  }
-
-  function stopTimer() {
-    if (timerId) {
-      clearInterval(timerId);
-      timerId = null;
-    }
-  }
-
-  function startCountdown() {
-    let remaining = COUNTDOWN_SECONDS;
-    countdownEl.textContent = remaining;
-    if (modal) modal.show();
-
-    stopTimer();
-    timerId = setInterval(() => {
-      remaining -= 1;
-      if (remaining > 0) {
-        countdownEl.textContent = remaining;
-        return;
-      }
-      stopTimer();
-      if (modal) modal.hide();
-      form.submit();
-    }, 1000);
-  }
 
   if (confirmBtn) {
     confirmBtn.addEventListener("click", () => {
@@ -51,14 +15,7 @@ const COUNTDOWN_SECONDS = 10;
         form.reportValidity();
         return;
       }
-      startCountdown();
-    });
-  }
-
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", () => {
-      stopTimer();
-      if (modal) modal.hide();
+      form.submit();
     });
   }
 
