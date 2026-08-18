@@ -1,59 +1,32 @@
 import pytest
-from app.test.test_base import test_client, test_session
-from app.auth.dao import auth_user
-from app.models import User, UserRole
 
-
-def _make_user(test_session, **kwargs):
-    username = kwargs.pop('username', 'kh1')
-    password = kwargs.pop('password', '123456')
-    email_base = kwargs.pop('email_base', 'user')
-    email = f'{email_base}@example.com'
-    phone = kwargs.pop('phone', '0901234567')
-    address = kwargs.pop('address', '123 Nguyễn Huệ')
-    role = kwargs.pop('role', UserRole.USER)
-    user = User(
-        username=username,
-        email=email,
-        phone=phone,
-        address=address,
-        role=role,
-    )
-    user.set_password(password)
-    test_session.add(user)
-    test_session.commit()
-    return user
+from app.auth import dao as auth_dao
+from app.models import UserRole
+from app.test.test_base import app, client, test_session, make_user, login
 
 
 @pytest.fixture
 def setup_users(test_session):
-    customer = _make_user(test_session, username='kh1', email_base='kh1', role=UserRole.USER)
-    inactive = _make_user(test_session, username='duy', email_base='duy', password='123456', role=UserRole.USER, active=False)
-    admin = _make_user(test_session, username='admin', email_base='admin', password='admin123', role=UserRole.ADMIN)
+    customer = make_user('kh1', full_name='Khách 1')
+    inactive = make_user('duy', active=False)
+    admin = make_user('admin', role=UserRole.ADMIN)
     return customer, inactive, admin
 
 
-# test dao auth_user
+# ---------------- DAO: auth_user ----------------
+
 def test_auth_user_success(setup_users):
-    customer, _, _ = setup_users
-    result = auth_user('kh1', '123456')
+    result = auth_dao.auth_user('kh1', '123456')
     assert result is not None
     assert result.username == 'kh1'
 
 
 def test_auth_user_wrong_password(setup_users):
-    result = auth_user('kh1', '111111')
-    assert result is None
+    assert auth_dao.auth_user('kh1', '111111') is None
 
 
 def test_auth_user_wrong_username(setup_users):
-    result = auth_user('trangdeptrai', '123456')
-    assert result is None
-
-
-def test_auth_user_inactive_account(setup_users):
-    result = auth_user('banned', '123456')
-    assert result is None
+    assert auth_dao.auth_user('khongco', '123456') is None
 
 
 @pytest.mark.parametrize('username, password', [
@@ -64,68 +37,78 @@ def test_auth_user_inactive_account(setup_users):
     ('kh1', ''),
 ])
 def test_auth_user_empty_inputs(username, password, setup_users):
-    assert auth_user(username, password) is None
+    assert auth_dao.auth_user(username, password) is None
 
 
 def test_auth_user_strips_whitespace(setup_users):
-    result = auth_user('  kh1  ', '  123456  ')
+    result = auth_dao.auth_user('  kh1  ', '  123456  ')
     assert result is not None
     assert result.username == 'kh1'
 
 
-def test_get_login_page_renders_template(test_client, mocker):
-    mock_render = mocker.patch(
-        'app.index.render_template',
-        return_value='<html>Login</html>'
-    )
-    res = test_client.get('/login')
-    assert res.status_code == 200
-    mock_render.assert_called_once()
-
-
-# post login
-def test_login_success_customer_no_next(test_client, setup_users, mocker):
+def test_auth_user_returns_user_object(setup_users):
     customer, _, _ = setup_users
-    mocker.patch('app.auth.dao.auth_user', return_value=customer)
-    mock_login = mocker.patch('app.index.login_user')
+    assert auth_dao.auth_user('kh1', '123456').id == customer.id
 
-    res = test_client.post('/login', data={'username': 'kh1', 'password': '123456'})
 
+# ---------------- ROUTER: GET /auth/login ----------------
+
+def test_get_login_page_renders(client, app):
+    res = client.get('/auth/login')
+    assert res.status_code == 200
+    assert b'login' in res.data or b'form' in res.data
+
+
+def test_get_login_redirects_when_authenticated(client, app, setup_users):
+    login(client, username='kh1')
+    res = client.get('/auth/login')
     assert res.status_code == 302
     assert res.headers['Location'] == '/'
-    mock_login.assert_called_once()
 
 
-def test_login_success_customer_with_next(test_client, setup_users, mocker):
-    customer, _, _ = setup_users
-    mocker.patch('app.auth.dao.auth_user', return_value=customer)
-    mocker.patch('app.index.login_user')
+# ---------------- ROUTER: POST /auth/login ----------------
 
-    res = test_client.post('/login?next=/api/pay', data={'username': 'kh1', 'password': '123456'})
-
+def test_login_success_customer(client, app, setup_users):
+    res = login(client, username='kh1')
     assert res.status_code == 302
-    assert res.headers['Location'] == '/api/pay'
+    assert res.headers['Location'] == '/'
 
 
-def test_login_success_admin_always_to_admin(test_client, setup_users, mocker):
-    _, _, admin = setup_users
-    mocker.patch('app.auth.dao.auth_user', return_value=admin)
-    mocker.patch('app.index.login_user')
-
-    res = test_client.post('/login?next=/api/pay', data={'username': 'admin_sushi', 'password': 'admin123'})
-
+def test_login_success_customer_with_next(client, app, setup_users):
+    res = client.post('/auth/login?next=/cart/',
+                      data={'username': 'kh1', 'password': '123456'})
     assert res.status_code == 302
-    assert res.headers['Location'] == '/admin'
+    assert res.headers['Location'] == '/cart/'
 
 
-def test_login_failed_wrong_credentials(test_client, setup_users, mocker):
-    mocker.patch('app.auth.dao.auth_user', return_value=None)
-    mock_login = mocker.patch('app.index.login_user')
-    mock_render = mocker.patch('app.index.render_template', return_value='Trang HTML Sai Mật Khẩu')
+def test_login_success_admin_goes_to_admin(client, app, setup_users):
+    res = login(client, username='admin')
+    assert res.status_code == 302
+    assert res.headers['Location'] == '/admin/'
 
-    res = test_client.post('/login', data={'username': 'kh1', 'password': 'trangok'})
 
+def test_login_success_restaurant_goes_to_dashboard(client, app):
+    make_user('owner', role=UserRole.RESTAURANT)
+    res = login(client, username='owner')
+    assert res.status_code == 302
+    assert res.headers['Location'] == '/restaurant/'
+
+
+def test_login_failed_wrong_credentials(client, app, setup_users):
+    res = client.post('/auth/login',
+                      data={'username': 'kh1', 'password': 'sai'})
     assert res.status_code == 200
-    assert res.data.decode('utf-8') == 'Trang HTML Sai Mật Khẩu'
-    mock_login.assert_not_called()
-    mock_render.assert_called_once_with('login.html', err_msg='Sai tên đăng nhập hoặc mật khẩu')
+    assert 'Sai tên đăng nhập hoặc mật khẩu'.encode('utf-8') in res.data
+
+
+def test_login_locked_account_blocked(client, app, setup_users):
+    customer, _, _ = setup_users
+    from datetime import datetime, timedelta
+    customer.locked_until = datetime.now() + timedelta(minutes=15)
+    from app import db
+    db.session.commit()
+
+    res = client.post('/auth/login',
+                      data={'username': 'kh1', 'password': '123456'})
+    assert res.status_code == 200
+    assert 'bị khóa'.encode('utf-8') in res.data

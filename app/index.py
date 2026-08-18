@@ -13,12 +13,10 @@ def register_routers(app):
         from app.models import Restaurant, RestaurantStatus
 
         try:
-            restaurants = (
-                Restaurant.query
-                .filter(Restaurant.status == RestaurantStatus.APPROVED,
-                        Restaurant.active == True)
-                .all()
-            )
+            restaurants = (Restaurant.query
+                           .filter(Restaurant.status == RestaurantStatus.APPROVED,
+                                   Restaurant.active == True)
+                           .all())
         except Exception:
             restaurants = []
 

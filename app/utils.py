@@ -1,3 +1,5 @@
+from math import radians, sin, cos, sqrt, atan2
+
 def stats_cart(cart):
     total_quantity, total_amount = 0, 0
 
@@ -10,8 +12,6 @@ def stats_cart(cart):
         'total_quantity': total_quantity,
         'total_amount': total_amount
     }
-
-from math import radians, sin, cos, sqrt, atan2
 
 def haversine_km(lat1, lon1, lat2, lon2):
     """Khoảng cách đường chim bay giữa 2 tọa độ GPS, đơn vị km."""

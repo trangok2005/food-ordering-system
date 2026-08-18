@@ -48,6 +48,9 @@ def create_app():
     from app.admin import admin_bp
     app.register_blueprint(admin_bp)
 
+    from app.ai import ai_bp
+    app.register_blueprint(ai_bp)
+
     from app import index
     index.register_routers(app)
 
@@ -72,6 +75,3 @@ def create_app():
         }
 
     return app
-
-
-

@@ -1,192 +1,262 @@
 import pytest
-from datetime import datetime
-from app.test.test_base import test_app, test_client, test_session, sample_products, logged_in_user, \
-    cart_standard, setup_user
-from app.models import User, UserRole, Order, OrderStatus, Product
-from app.dao import handle_payment, count_user_orders_today
+
+from app import db
+from app.cart import dao as cart_dao
+from app.models import (Order, OrderStatus, PaymentStatus)
+from app.test.test_base import (app, client, test_session,
+                                make_restaurant_owner, make_restaurant,
+                                make_customer, make_dish, login)
 
 
-# dao trước
-def test_handle_payment_success(test_session, setup_user, sample_products):
-    cart = {"1": {"id": sample_products[0].id, "name": "Cá hồi", "price": 120000, "quantity": 2}}
+def _setup_cart(customer_id=None, quantity=2):
+    owner = make_restaurant_owner()
+    restaurant = make_restaurant(owner)
+    dish = make_dish(restaurant, name='Cá hồi Sashimi', price=120000)
+    customer = make_customer()
+    db.session.commit()
+    cart_dao.add_to_cart(customer.id, dish.id, quantity=quantity)
+    return restaurant, customer, dish
 
-    result = handle_payment(cart, {"address": "123 Nguyễn Huệ", "phone": "0901234567"}, setup_user.id)
 
-    assert result is True
+# ---------------- DAO: build_checkout_payload ----------------
 
-    order = Order.query.filter_by(user_id=setup_user.id).first()
-    assert order is not None
+def test_build_checkout_payload_empty_cart(app):
+    customer = make_customer()
+    db.session.commit()
+
+    with pytest.raises(ValueError):
+        cart_dao.build_checkout_payload(customer.id)
+
+
+def test_build_checkout_payload_success(app):
+    restaurant, customer, dish = _setup_cart()
+
+    pending = cart_dao.build_checkout_payload(customer.id)
+
+    assert len(pending['carts']) == 1
+    cart_data = pending['carts'][0]
+    assert cart_data['restaurant_id'] == restaurant.id
+    assert cart_data['items'][0]['dish_id'] == dish.id
+    assert cart_data['items'][0]['quantity'] == 2
+    assert cart_data['items'][0]['unit_price'] == 120000
+    assert pending['total'] == 240000
+
+
+def test_build_checkout_payload_restaurant_closed(app):
+    restaurant, customer, _ = _setup_cart()
+    restaurant.is_open = False
+    db.session.commit()
+
+    with pytest.raises(ValueError) as exc:
+        cart_dao.build_checkout_payload(customer.id)
+    assert 'đóng cửa' in str(exc.value)
+
+
+def test_build_checkout_payload_min_order(app):
+    restaurant, customer, _ = _setup_cart()
+    restaurant.min_order_amount = 500000
+    db.session.commit()
+
+    with pytest.raises(ValueError) as exc:
+        cart_dao.build_checkout_payload(customer.id)
+    assert 'tối thiểu' in str(exc.value)
+
+
+def test_build_checkout_payload_out_of_stock(app):
+    _, customer, dish = _setup_cart()
+    dish.is_available = False
+    db.session.commit()
+
+    with pytest.raises(ValueError) as exc:
+        cart_dao.build_checkout_payload(customer.id)
+    assert 'hết hàng' in str(exc.value)
+
+
+def test_build_checkout_payload_outside_radius(app):
+    restaurant, customer, _ = _setup_cart()
+    restaurant.latitude = 10.7769
+    restaurant.longitude = 106.7009
+    restaurant.delivery_radius_km = 2
+    db.session.commit()
+
+    with pytest.raises(ValueError) as exc:
+        cart_dao.build_checkout_payload(customer.id, lat=10.83, lng=106.73)
+    assert 'ngoài bán kính' in str(exc.value)
+
+
+# ---------------- DAO: create_orders_from_pending ----------------
+
+def test_create_orders_creates_and_clears_cart(app):
+    _, customer, dish = _setup_cart()
+    pending = cart_dao.build_checkout_payload(customer.id)
+    pending.update({
+        'address': '123 Nguyễn Huệ',
+        'phone': '0901234567',
+    })
+
+    orders = cart_dao.create_orders_from_pending(customer.id, pending)
+
+    assert len(orders) == 1
+    order = orders[0]
     assert order.status == OrderStatus.PENDING
+    assert order.payment_status == PaymentStatus.PAID
     assert order.total_amount == 240000
-    assert Product.query.get(sample_products[0].id).stock == 50 - 2
+    assert order.delivery_address == '123 Nguyễn Huệ'
+    assert order.phone == '0901234567'
+    assert order.order_details[0].dish_id == dish.id
+    assert order.order_details[0].unit_price == 120000
+
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
-def test_handle_payment_many_product(test_session, setup_user, sample_products):
-    cart = {
-        "1": {"id": 1, "name": "Cá hồi Sashimi", "price": 120000, "quantity": 2},
-        "2": {"id": 3, "name": "Cá ngừ Sashimi", "price": 100000, "quantity": 1}
+def test_create_orders_multi_cart_one_order_each(app):
+    owner = make_restaurant_owner()
+    rest_a = make_restaurant(owner)
+    owner_b = make_restaurant_owner('B')
+    rest_b = make_restaurant(owner_b)
+    customer = make_customer()
+    dish_a = make_dish(rest_a, name='Món A', price=10000)
+    dish_b = make_dish(rest_b, name='Món B', price=20000)
+    db.session.commit()
+
+    pending = {
+        'carts': [
+            {'restaurant_id': rest_a.id, 'items': [
+                {'dish_id': dish_a.id, 'quantity': 1, 'unit_price': 10000}],
+             'total': 10000},
+            {'restaurant_id': rest_b.id, 'items': [
+                {'dish_id': dish_b.id, 'quantity': 1, 'unit_price': 20000}],
+             'total': 20000},
+        ],
+        'address': 'HCM',
+        'phone': '0901234567',
     }
-    handle_payment(cart, {"address": "HCM", "phone": "0901234567"}, setup_user.id)
 
-    assert Product.query.get(sample_products[0].id).stock == 50 - 2
-    assert Product.query.get(sample_products[2].id).stock == 20 - 1
+    orders = cart_dao.create_orders_from_pending(customer.id, pending)
 
-
-@pytest.mark.parametrize('phone', [
-    '123', 'abc'
-])
-def test_handle_payment_invalid_phone(phone, test_session, setup_user, sample_products):
-    cart = {"1": {"id": sample_products[0].id, "name": "Cá hồi", "price": 120000, "quantity": 1}}
-
-    with pytest.raises(ValueError):
-        handle_payment(cart, {"address": "HCM", "phone": phone}, setup_user.id)
+    assert len(orders) == 2
+    assert {o.restaurant_id for o in orders} == {rest_a.id, rest_b.id}
+    assert sum(o.total_amount for o in orders) == 30000
 
 
-def test_handle_payment_min_amount(test_session, setup_user, sample_products):
-    cart = {"5": {"id": sample_products[4].id, "name": "Coca Cola", "price": 10000, "quantity": 2}}
+def test_get_user_orders(app):
+    _, customer, _ = _setup_cart()
+    pending = cart_dao.build_checkout_payload(customer.id)
+    pending.update({'address': 'HCM', 'phone': '0901234567'})
+    cart_dao.create_orders_from_pending(customer.id, pending)
 
-    with pytest.raises(ValueError):
-        handle_payment(cart, {"address": "HCM", "phone": "0901234567"}, setup_user.id)
-
-
-def test_handle_payment_out_of_stock(test_session, setup_user, sample_products):
-    cart = {"2": {"id": sample_products[1].id, "name": "Cá ngừ", "price": 150000, "quantity": 1}}
-
-    with pytest.raises(ValueError):
-        handle_payment(cart, {"address": "HCM", "phone": "0901234567"}, setup_user.id)
+    orders = cart_dao.get_user_orders(customer.id)
+    assert len(orders) == 1
 
 
-def test_handle_payment_product_not_exist(test_session, setup_user):
-    cart = {"9999": {"id": 9999, "name": "Ảo", "price": 100000, "quantity": 1}}
+# ---------------- ROUTER: /cart/checkout ----------------
 
-    with pytest.raises(ValueError):
-        handle_payment(cart, {"address": "HCM", "phone": "0901234567"}, setup_user.id)
-
-
-def test_handle_payment_order_limit(test_session, setup_user, sample_products, mocker):
-    mocker.patch('app.dao.count_user_orders_today', return_value=5)
-    cart = {"1": {"id": sample_products[0].id, "name": "Cá hồi", "price": 120000, "quantity": 1}}
-    with pytest.raises(ValueError):
-        handle_payment(cart, {"address": "HCM", "phone": "0901234567"}, setup_user.id)
+def test_checkout_requires_login(client, app):
+    assert client.get('/cart/checkout').status_code == 302
 
 
-def test_count_orders_today_zero(test_session, setup_user):
-    assert count_user_orders_today(setup_user.id) == 0
+def test_checkout_view_success(client, app):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
+
+    res = client.get('/cart/checkout')
+    assert res.status_code == 200
+    assert 'Cá hồi Sashimi'.encode('utf-8') in res.data
 
 
-def test_count_orders_today_correct(test_session, setup_user):
-    for i in range(3):
-        test_session.add(Order(
-            user_id=setup_user.id, delivery_address='HCM',
-            phone='0901234567', total_amount=120000,
-            status=OrderStatus.PENDING
-        ))
-    test_session.commit()
-    assert count_user_orders_today(setup_user.id) == 3
+def test_checkout_view_shows_issues(client, app):
+    restaurant, customer, _ = _setup_cart()
+    restaurant.is_open = False
+    db.session.commit()
+    login(client, username='customer')
+
+    res = client.get('/cart/checkout')
+    assert res.status_code == 200
+    assert 'đóng cửa'.encode('utf-8') in res.data
 
 
-def test_count_orders_today_not_count_other_user(test_session, setup_user):
-    other = User(username='other99', password='x', phone='0988888888',
-                 address='HN', role=UserRole.USER)
-    test_session.add(other)
-    test_session.flush()
-    test_session.add(Order(
-        user_id=other.id, delivery_address='HN',
-        phone='0988888888', total_amount=120000,
-        status=OrderStatus.PENDING,
-    ))
-    test_session.commit()
-    assert count_user_orders_today(setup_user.id) == 0
+# ---------------- ROUTER: tạo payment ----------------
+
+class FakePayOS:
+    def create_payment_link(self, amount, description, reference, return_url, cancel_url):
+        return {'id': 'payos_123', 'checkoutUrl': 'https://payos.test/checkout'}
+
+    def get_payment_request(self, payment_request_id):
+        return {'status': 'PAID'}
 
 
-# post api/pay
-def test_pay_success(test_client, logged_in_user, cart_standard, mocker):
-    mock_payment = mocker.patch('app.dao.handle_payment', return_value=True)
-    mocker.patch('app.utils.is_restaurant_available', return_value=True)
+def test_create_payment_requires_login(client, app):
+    assert client.post('/cart/create-payment').status_code == 302
 
-    res = test_client.post('/api/pay', json={'address': '123 Nguyễn Huệ', 'phone': '0901234567'})
-    data = res.get_json()
+
+def test_create_payment_requires_address_phone(client, app, monkeypatch):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
+    monkeypatch.setattr('app.cart.payos.get_client', lambda: FakePayOS())
+
+    res = client.post('/cart/create-payment', data={'address': '', 'phone': ''})
+    assert res.status_code == 302
+    assert res.headers['Location'].endswith('/cart/checkout')
+
+
+def test_create_payment_redirects_to_payos(client, app, monkeypatch):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
+    monkeypatch.setattr('app.cart.payos.get_client', lambda: FakePayOS())
+
+    res = client.post('/cart/create-payment', data={
+        'address': '123 Nguyễn Huệ',
+        'phone': '0901234567',
+    })
+
+    assert res.status_code == 302
+    assert res.headers['Location'] == 'https://payos.test/checkout'
+
+
+def test_payment_return_paid_creates_orders(client, app, monkeypatch):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
+    monkeypatch.setattr('app.cart.payos.get_client', lambda: FakePayOS())
+
+    client.post('/cart/create-payment', data={
+        'address': '123 Nguyễn Huệ',
+        'phone': '0901234567',
+    })
+
+    with client.session_transaction() as sess:
+        assert 'pending_payment' in sess
+        payment_request_id = sess['pending_payment']['payment_request_id']
+
+    res = client.get(f'/cart/payment-return?id={payment_request_id}')
 
     assert res.status_code == 200
-    assert data['status'] == 200
-    assert data['msg'] == 'Đặt hàng thành công'
-
-    with test_client.session_transaction() as sess:
-        assert 'cart' not in sess
-
-    mock_payment.assert_called_once()
+    assert 'thành công'.encode('utf-8') in res.data
+    assert Order.query.count() == 1
+    assert cart_dao.get_user_carts(customer_id()) == []
 
 
-def test_pay_requires_login(test_client, cart_standard):
-    res = test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-    assert res.status_code == 401
+def customer_id():
+    from app.auth import dao as auth_dao
+    return auth_dao.get_user_by_username('customer').id
 
 
-def test_pay_empty_cart(test_client, logged_in_user):
-    res = test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-    data = res.get_json()
-    assert res.status_code == 400
-    assert data['err_msg'] == 'Giỏ hàng trống'
+def test_payment_return_no_pending(client, app, monkeypatch):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
+    monkeypatch.setattr('app.cart.payos.get_client', lambda: FakePayOS())
+
+    res = client.get('/cart/payment-return?id=payos_123')
+    assert res.status_code == 302
+    assert res.headers['Location'].endswith('/cart/')
 
 
-def test_pay_restaurant_closed(test_client, logged_in_user, cart_standard, mocker):
-    mocker.patch('app.utils.is_restaurant_available', side_effect=ValueError('Nhà hàng hiện đã đóng cửa'))
-    res = test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-    data = res.get_json()
+def test_payment_cancel_page(client, app):
+    _, customer, _ = _setup_cart()
+    login(client, username='customer')
 
-    assert res.status_code == 400
-    assert 'đóng cửa' in data['err_msg']
+    with client.session_transaction() as sess:
+        sess['pending_payment'] = {'total': 240000}
 
-    with test_client.session_transaction() as sess:
-        assert 'cart' in sess
-
-
-@pytest.mark.parametrize('error_message, payload', [
-    ("Bạn đã đạt giới hạn 5 đơn hàng hôm nay", {"address": "Q1", "phone": "0901234567"}),
-    ("Số điện thoại không hợp lệ (phải từ 10-11 số)", {"address": "Q1", "phone": "abc"}),
-    ("Sản phẩm Cá hồi không đủ tồn kho", {"address": "Q1", "phone": "0901234567"}),
-    ("Sản phẩm không tồn tại", {"address": "Q1", "phone": "0901234567"}),
-    ("Đơn hàng tối thiểu phải từ 50.000đ", {"address": "Q1", "phone": "0901234567"}),
-], ids=["limit_reached", "invalid_phone", "out_of_stock", "not_found", "min_amount"])
-def test_pay_business_validations(test_client, logged_in_user, cart_standard, mocker,
-                                  error_message, payload):
-    mocker.patch('app.dao.handle_payment', side_effect=ValueError(error_message))
-    mocker.patch('app.utils.is_restaurant_available', return_value=True)
-    res = test_client.post('/api/pay', json=payload)
-    data = res.get_json()
-
-    assert res.status_code == 400
-    assert error_message in data['err_msg']
-
-    with test_client.session_transaction() as sess:
-        assert 'cart' in sess
-
-
-def test_pay_system_error(test_client, logged_in_user, cart_standard, mocker):
-    mocker.patch('app.dao.handle_payment', side_effect=Exception('Hệ thống đang bận'))
-    mocker.patch('app.utils.is_restaurant_available', return_value=True)
-
-    res = test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-    data = res.get_json()
-
-    assert res.status_code == 500
-    assert data['err_msg'] == 'Hệ thống đang bận'
-
-    with test_client.session_transaction() as sess:
-        assert 'cart' in sess
-
-
-def test_pay_cart_cleared_only_on_success(test_client, logged_in_user, cart_standard, mocker):
-    mocker.patch('app.utils.is_restaurant_available', return_value=True)
-    mocker.patch('app.dao.handle_payment', side_effect=ValueError('Lỗi'))
-
-    test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-
-    with test_client.session_transaction() as sess:
-        assert 'cart' in sess
-
-    mocker.patch('app.dao.handle_payment', return_value=True)
-    test_client.post('/api/pay', json={'address': 'Q1', 'phone': '0901234567'})
-
-    with test_client.session_transaction() as sess:
-        assert 'cart' not in sess
+    res = client.get('/cart/payment-cancel')
+    assert res.status_code == 200
+    assert 'không thành công'.encode('utf-8') in res.data

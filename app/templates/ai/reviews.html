@@ -1,0 +1,50 @@
+{% extends 'layout/base.html' %}
+{% block title %}Đánh Giá Của Tôi | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="orders-page">
+  <h2 class="section-title">Đánh Giá Của Tôi</h2>
+
+  {% set label_map = {
+    'POSITIVE': ('Tích cực', 'success'),
+    'NEUTRAL':  ('Trung tính', 'secondary'),
+    'NEGATIVE': ('Tiêu cực', 'danger'),
+  } %}
+
+  {% if reviews %}
+  {% for review in reviews %}
+  <div class="cart-card mb-3">
+    <div class="cart-card-header flex-wrap">
+      <div>
+        <h3 class="cart-restaurant mb-0">{{ review.dish.name if review.dish else 'Món ăn' }}</h3>
+        <small class="text-muted">
+          Đơn #{{ review.order_id }} &middot; {{ review.created_date.strftime('%H:%M %d/%m/%Y') }}
+        </small>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-warning">{{ '★' * review.rating }}{{ '☆' * (5 - review.rating) }}</span>
+        {% if review.sentiment_label %}
+        {% set label, badge = label_map.get(review.sentiment_label.name, (review.sentiment_label.name, 'secondary')) %}
+        <span class="badge bg-{{ badge }}">
+          {{ label }} {% if review.sentiment_score is not none %}({{ '%.0f%%'|format(review.sentiment_score * 100) }}){% endif %}
+        </span>
+        {% else %}
+        <span class="badge bg-light text-muted">Chưa phân tích</span>
+        {% endif %}
+      </div>
+    </div>
+    {% if review.comment %}
+    <div class="px-3 py-2">
+      <p class="mb-0">&ldquo;{{ review.comment }}&rdquo;</p>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <p>Bạn chưa có đánh giá nào.</p>
+    <a href="{{ url_for('cart.my_orders') }}" class="btn btn-primary">Xem hóa đơn của tôi</a>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

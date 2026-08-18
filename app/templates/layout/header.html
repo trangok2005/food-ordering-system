@@ -22,6 +22,8 @@
     </button>
 
     <div class="collapse navbar-collapse" id="mainNav">
+      {% if not current_user.is_authenticated or
+            current_user.role.name in ['USER', 'CUSTOMER'] %}
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
           <a class="nav-link" href="/">Trang chủ</a>
@@ -30,6 +32,7 @@
           <a class="nav-link" href="{{ url_for('browse.search_view') }}">Tìm món</a>
         </li>
       </ul>
+      {% endif %}
 
       <div class="d-flex align-items-center gap-2 flex-wrap">
         {% if current_user.is_authenticated %}
@@ -38,6 +41,9 @@
         {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
         <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
           >Hóa đơn của tôi</a
+        >
+        <a href="{{ url_for('ai.my_reviews') }}" class="btn btn-outline-info btn-sm"
+          >Đánh giá của tôi</a
         >
         {% elif current_user.role.name == 'RESTAURANT' %}
         <a href="{{ url_for('restaurant.dashboard') }}" class="btn btn-outline-info btn-sm"

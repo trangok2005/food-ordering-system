@@ -37,7 +37,47 @@
             <td>{{ item.dish.name }}</td>
             <td class="text-center">{{ item.quantity }} x {{ item.unit_price|vnd }}</td>
             <td class="text-end">{{ (item.unit_price * item.quantity)|vnd }}</td>
+            {% if order.status.name == 'COMPLETED' %}
+            <td class="text-end">
+              {% if item.dish_id in (reviewed.get(order.id, {})|default({})) %}
+              <span class="badge bg-success">Đã đánh giá</span>
+              {% else %}
+              <button class="btn btn-outline-primary btn-sm"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#review-{{ order.id }}-{{ item.dish_id }}"
+                      aria-expanded="false">Đánh giá</button>
+              {% endif %}
+            </td>
+            {% endif %}
           </tr>
+          {% if order.status.name == 'COMPLETED' and
+                item.dish_id not in (reviewed.get(order.id, {})|default({})) %}
+          <tr class="collapse" id="review-{{ order.id }}-{{ item.dish_id }}">
+            <td colspan="4">
+              <form method="post" action="{{ url_for('ai.add_review') }}" class="row g-2 align-items-end">
+                <input type="hidden" name="order_id" value="{{ order.id }}" />
+                <input type="hidden" name="dish_id" value="{{ item.dish_id }}" />
+                <div class="col-auto">
+                  <label class="form-label small mb-1">Đánh giá</label>
+                  <select class="form-select form-select-sm" name="rating" required>
+                    <option value="">Chọn</option>
+                    {% for i in range(1, 6) %}
+                    <option value="{{ i }}">{{ '★' * i }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label small mb-1">Nhận xét (tùy chọn)</label>
+                  <input class="form-control form-control-sm" type="text" name="comment"
+                         placeholder="Món ăn thế nào?" />
+                </div>
+                <div class="col-auto">
+                  <button class="btn btn-primary btn-sm" type="submit">Gửi đánh giá</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>

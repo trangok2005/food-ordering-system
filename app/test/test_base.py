@@ -1,193 +1,155 @@
-import datetime
-import hashlib
 import pytest
+from datetime import datetime
+
 from flask import Flask
-from flask_login import LoginManager
+from flask_login import LoginManager, current_user
 
 from app import db
-from app.models import UserRole, User
-from app.index import register_routers
+from app.models import (User, UserRole, Restaurant, RestaurantStatus,
+                        Category, Dish, Order, OrderStatus,
+                        PaymentMethod, PaymentStatus)
 
 
-def create_app():
-    app = Flask(__name__)
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///:memory:"
-    app.config["TESTING"] = True
-    app.config["PAGE_SIZE"] = 2
-    app.secret_key = 'trangdeptraicomotkohaip@ok'
+def make_app():
+    app = Flask(__name__, template_folder='../templates', static_folder='../static')
+    app.config['TESTING'] = True
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.secret_key = 'test'
+
     db.init_app(app)
-
     login = LoginManager()
     login.init_app(app)
+    login.login_view = 'auth.login_view'
 
     @login.user_loader
     def load_user(user_id):
-        return db.get_user_by_id(user_id)
+        from app.auth import dao as auth_dao
+        return auth_dao.get_user_by_id(user_id)
 
-    register_routers(app=app)
+    from app.auth import auth_bp
+    app.register_blueprint(auth_bp)
+    from app.browse import browse_bp
+    app.register_blueprint(browse_bp)
+    from app.cart import cart_bp
+    app.register_blueprint(cart_bp)
+    from app.restaurant import restaurant_bp
+    app.register_blueprint(restaurant_bp)
+    from app.admin import admin_bp
+    app.register_blueprint(admin_bp)
+    from app.ai import ai_bp
+    app.register_blueprint(ai_bp)
+
+    from app import index
+    index.register_routers(app)
+
+    @app.context_processor
+    def inject_common():
+        from app.models import Category
+        from app.cart import dao as cart_dao
+        try:
+            categories = Category.query.all()
+        except Exception:
+            categories = []
+        try:
+            if current_user.is_authenticated:
+                cart_stats = cart_dao.get_cart_stats(current_user.id)
+            else:
+                cart_stats = {'total_quantity': 0, 'total_amount': 0}
+        except Exception:
+            cart_stats = {'total_quantity': 0, 'total_amount': 0}
+        return {'categories': categories, 'cart_stats': cart_stats}
 
     return app
 
 
 @pytest.fixture
-def test_app():
-    app = create_app()
-
-    with app.app_context():
+def app():
+    application = make_app()
+    with application.app_context():
         db.create_all()
-        yield app
+        yield application
+        db.session.remove()
         db.drop_all()
 
 
 @pytest.fixture
-def test_client(test_app):
-    return test_app.test_client()
+def client(app):
+    return app.test_client()
 
 
 @pytest.fixture
-def test_session(test_app):
+def test_session(app):
     yield db.session
 
 
-@pytest.fixture
-def sample_products(test_session):
-    p1 = Product(name="Cá hồi Sashimi", price=120000.0, stock=50, category_id=1)
-    p2 = Product(name="Cá ngừ Sashimi", price=150000.0, stock=0, category_id=1)
-    p3 = Product(name="Cá Nigiri", price=90000.0, stock=20, category_id=2)
-    p4 = Product(name="Cua Nigiri", price=80000.0, stock=10, category_id=2)
-    p5 = Product(name="Coca Cola", price=10000.0, stock=150, category_id=3)
-    p6 = Product(name="Cá Shusi", price=190000.0, stock=35, category_id=4)
-    p7 = Product(name="Cua Sushi", price=10000.0, stock=150, category_id=4)
-    p8 = Product(name="Nước khoán", price=8000.0, stock=100, category_id=3)
-    test_session.add_all([p1, p2, p3, p4, p5, p6, p7, p8])
-    test_session.commit()
-    return [p1, p2, p3, p4, p5, p6, p7, p8]
+# ---------------- HÀM TẠO DỮ LIỆU DÙNG CHUNG ----------------
+
+def make_user(username, role=UserRole.CUSTOMER, password='123456', **kwargs):
+    email = kwargs.pop('email', None) or f'{username}@test.vn'
+    user = User(username=username, email=email, role=role, **kwargs)
+    user.set_password(password)
+    db.session.add(user)
+    db.session.flush()
+    return user
 
 
-# auth
-@pytest.fixture
-def logged_in_user(mocker):
-    class FakeUser:
-        is_authenticated = True
-        id = 1
-        role = UserRole.USER
-
-    mocker.patch('flask_login.utils._get_user', return_value=FakeUser())
-    mocker.patch('app.index.current_user', new=FakeUser())
-    return FakeUser()
+def make_admin(**kwargs):
+    return make_user('admin', role=UserRole.ADMIN, full_name='Quan tri', **kwargs)
 
 
-@pytest.fixture
-def logged_in_admin(mocker):
-    class FakeAdmin:
-        is_authenticated = True
-        id = 1
-        role = UserRole.ADMIN
-
-    mocker.patch('flask_login.utils._get_user', return_value=FakeAdmin())
-    mocker.patch('app.index.current_user', new=FakeAdmin())
-    return FakeAdmin()
+def make_customer(username='customer', **kwargs):
+    return make_user(username, role=UserRole.CUSTOMER, **kwargs)
 
 
-# set up user
-@pytest.fixture
-def setup_user(test_session):
-    u = User(
-        username='kh1',
-        password=hashlib.md5('123456'.encode()).hexdigest(),
-        phone='0901234567',
-        address='123 Nguyễn Huệ',
-        role=UserRole.USER,
-    )
-    test_session.add(u)
-    test_session.commit()
-    return u
+def make_restaurant_owner(prefix=''):
+    return make_user(f'owner{prefix}', role=UserRole.RESTAURANT,
+                     full_name=f'Chu nha hang {prefix}')
 
 
-@pytest.fixture
-def setup_users(test_session):
-    admin = User(
-        username='admin',
-        password=hashlib.md5('123456'.encode()).hexdigest(),
-        phone='0911223344',
-        address='Nhà hàng Q3',
-        role=UserRole.ADMIN,
-    )
-    customer = User(
-        username='kh1',
-        password=hashlib.md5('123456'.encode()).hexdigest(),
-        phone='0901234567',
-        address='123 Nguyễn Huệ',
-        role=UserRole.USER,
-    )
-    test_session.add_all([admin, customer])
-    test_session.commit()
-    return admin, customer
+def make_restaurant(owner, status=RestaurantStatus.APPROVED, name=None, **kwargs):
+    restaurant = Restaurant(name=name or f'Test Restaurant {owner.username}',
+                            address='123 Nguyen Hue', phone='0900000000',
+                            status=status, confirm_timeout_minutes=5,
+                            owner_id=owner.id, **kwargs)
+    db.session.add(restaurant)
+    db.session.flush()
+    return restaurant
 
 
-# setup order
-@pytest.fixture
-def setup_orders_user(test_session, setup_user, sample_products):
-    o1 = Order(user_id=setup_user.id, delivery_address='123 Nguyễn Huệ',
-               phone='0901234567', total_amount=240000,
-               status=OrderStatus.PENDING)
-    o2 = Order(user_id=setup_user.id, delivery_address='456 Lê Lợi',
-               phone='0901234567', total_amount=90000,
-               status=OrderStatus.PREPARING)
-    o3 = Order(user_id=setup_user.id, delivery_address='789 Trần Hưng Đạo',
-               phone='0901234567', total_amount=150000,
-               status=OrderStatus.CANCELLED)
-    test_session.add_all([o1, o2, o3])
-    test_session.flush()
-
-    test_session.add_all([
-        OrderDetail(order_id=o1.id, product_id=sample_products[0].id, quantity=2),
-        OrderDetail(order_id=o2.id, product_id=sample_products[2].id, quantity=1),
-        OrderDetail(order_id=o3.id, product_id=sample_products[4].id, quantity=3),
-    ])
-    test_session.commit()
-    return [o1, o2, o3]
+def make_owner_and_restaurant(prefix=''):
+    """Tạo luôn chủ + nhà hàng, trả về (owner, restaurant)."""
+    owner = make_restaurant_owner(prefix)
+    return owner, make_restaurant(owner)
 
 
-@pytest.fixture
-def setup_orders_admin(test_session, setup_users, sample_products):
-    _, customer = setup_users
-    statuses = [
-        OrderStatus.PENDING,
-        OrderStatus.PREPARING,
-        OrderStatus.DELIVERING,
-        OrderStatus.COMPLETED,
-    ]
-    orders = []
-    for i, status in enumerate(statuses):
-        o = Order(
-            user_id=customer.id,
-            delivery_address=f'Địa chỉ {i + 1}',
-            phone='0901234567',
-            total_amount=100000 + i * 50000,
-            status=status,
-        )
-        test_session.add(o)
-        orders.append(o)
-    test_session.flush()
-
-    for i, o in enumerate(orders):
-        test_session.add(OrderDetail(
-            order_id=o.id,
-            product_id=sample_products[i % len(sample_products)].id,
-            quantity=i + 1,
-        ))
-    test_session.commit()
-    return orders
+def make_dish(restaurant, name='Com tam', price=30000, **kwargs):
+    cat = (Category.query
+           .filter_by(name='Menu', restaurant_id=restaurant.id)
+           .first())
+    if not cat:
+        cat = Category(name='Menu', restaurant_id=restaurant.id)
+        db.session.add(cat)
+        db.session.flush()
+    dish = Dish(name=name, price=price,
+                restaurant_id=restaurant.id, category_id=cat.id, **kwargs)
+    db.session.add(dish)
+    db.session.flush()
+    return dish
 
 
-# giỏ hangf mẫu
-@pytest.fixture
-def cart_standard(test_client):
-    with test_client.session_transaction() as sess:
-        sess['cart'] = {
-            "1": {"id": 1, "name": "Cá hồi Sashimi", "price": 120000, "quantity": 2},
-            "2": {"id": 2, "name": "Cá ngừ Sashimi", "price": 100000, "quantity": 1},
-        }
+def make_order(restaurant, customer, status=OrderStatus.PENDING, total=100000, **kwargs):
+    order = Order(delivery_address='45 Le Loi', phone='0900000000',
+                  total_amount=total, status=status,
+                  payment_method=PaymentMethod.ONLINE,
+                  payment_status=PaymentStatus.PAID,
+                  paid_at=datetime.now(),
+                  user_id=customer.id, restaurant_id=restaurant.id, **kwargs)
+    db.session.add(order)
+    db.session.flush()
+    order.set_confirm_deadline()
+    return order
 
 
+def login(client, username='owner', password='123456'):
+    return client.post('/auth/login',
+                       data={'username': username, 'password': password})
