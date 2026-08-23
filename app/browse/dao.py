@@ -1,4 +1,4 @@
-from sqlalchemy import or_
+from sqlalchemy import or_, case
 
 from app.models import (
     Restaurant,
@@ -8,30 +8,62 @@ from app.models import (
 )
 
 def _page_size():
-    # Lấy số lượng kết quả hiển thị trên mỗi trang.
-    # Nếu chưa cấu hình thì mặc định là 24.
-    return SystemConfig.get(
+
+    value = SystemConfig.get(
         'SEARCH_PAGE_SIZE',
         24,
         cast=int
     )
 
+    if value < 20:
+        value = 20
 
-def search(keyword, page=1):
+    if value > 30:
+        value = 30
+
+    return value
+
+
+def _normalize_sort(sort):
+    allowed_sort = {
+        'relevance',
+        'name_asc',
+        'name_desc'
+    }
+
+    if sort not in allowed_sort:
+        return 'relevance'
+
+    return sort
+
+
+def search(keyword, page=1, sort='relevance'):
     """
     Tìm nhà hàng theo từ khóa.
-
     Từ khóa được tìm trong:
     - Tên nhà hàng
     - Tên món ăn
+    Kết quả:
+    - Chỉ nhà hàng APPROVED
+    - Chỉ nhà hàng active
+    - Phân trang 20-30 kết quả/trang
+    - Hỗ trợ sắp xếp:
+        + relevance
+        + name_asc
+        + name_desc
     """
 
-    # Xóa khoảng trắng thừa ở đầu và cuối keyword
     kw = (keyword or '').strip()
 
     # Không có keyword thì không tìm kiếm
     if not kw:
         return None
+
+    # Chuẩn hóa tiêu chí sort
+    sort = _normalize_sort(sort)
+
+    # Tạo pattern tìm kiếm
+    search_pattern = f'%{kw}%'
 
     query = (
         Restaurant.query
@@ -43,15 +75,41 @@ def search(keyword, page=1):
             Restaurant.status == RestaurantStatus.APPROVED,
             Restaurant.active == True,
             or_(
-                Restaurant.name.ilike(f'%{kw}%'),
-                Dish.name.ilike(f'%{kw}%')
+                Restaurant.name.ilike(search_pattern),
+                Dish.name.ilike(search_pattern)
             )
         )
         # Tránh một nhà hàng xuất hiện nhiều lần
         # khi có nhiều món ăn cùng khớp keyword.
         .distinct()
-        .order_by(Restaurant.name)
     )
+
+    if sort == 'name_asc':
+
+        query = query.order_by(
+            Restaurant.name.asc()
+        )
+
+    elif sort == 'name_desc':
+
+        query = query.order_by(
+            Restaurant.name.desc()
+        )
+
+    else:
+
+        relevance = case(
+            (
+                Restaurant.name.ilike(search_pattern),
+                0
+            ),
+            else_=1
+        )
+
+        query = query.order_by(
+            relevance,
+            Restaurant.name.asc()
+        )
 
     return query.paginate(
         page=page,
@@ -59,9 +117,9 @@ def search(keyword, page=1):
         error_out=False
     )
 
+
 def get_approved_restaurant(restaurant_id):
-    # Chỉ lấy nhà hàng đã được duyệt
-    # và đang hoạt động.
+
     return (
         Restaurant.query
         .filter(
@@ -72,11 +130,9 @@ def get_approved_restaurant(restaurant_id):
         .first()
     )
 
+
 def get_restaurant_menu(restaurant_id):
-    # Chỉ lấy những món:
-    # - Thuộc nhà hàng
-    # - Đang hoạt động
-    # - Đang có sẵn để bán
+    
     return (
         Dish.query
         .filter(

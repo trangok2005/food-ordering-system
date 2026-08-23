@@ -6,29 +6,54 @@ from app.browse import dao
 
 @browse_bp.route('/search')
 def search_view():
-    # Lấy keyword từ URL.
-    # Ví dụ: /browse/search?q=pizza
     keyword = request.args.get('q', '')
 
-    # Lấy số trang, mặc định là trang 1
     page = request.args.get(
         'page',
         1,
         type=int
     )
 
-    # Gọi DAO để tìm nhà hàng
-    pagination = dao.search(
-        keyword,
-        page=page
+    if page < 1:
+        page = 1
+
+    sort = request.args.get(
+        'sort',
+        'relevance'
     )
+
+    keyword = keyword.strip()
+
+    if not keyword:
+        return render_template(
+            'browse/search.html',
+            keyword='',
+            results=[],
+            pagination=None,
+            sort=sort,
+            message='Vui lòng nhập từ khóa tìm kiếm'
+        )
+
+    try:
+        pagination = dao.search(
+            keyword,
+            page=page,
+            sort=sort
+        )
+    except Exception:
+        return render_template(
+            'browse/search.html',
+            keyword=keyword,
+            results=[],
+            pagination=None,
+            sort=sort,
+            message='Có lỗi xảy ra trong quá trình tìm kiếm, vui lòng thử lại sau'
+        )
 
     results = []
 
     if pagination:
-        # Chuyển keyword về chữ thường
-        # để so sánh với tên món ăn.
-        kw = keyword.strip().lower()
+        kw = keyword.lower()
 
         for restaurant in pagination.items:
             matched = [
@@ -43,27 +68,33 @@ def search_view():
                 (restaurant, matched)
             )
 
+    # Không có kết quả
+    message = None
+
+    if pagination is not None and pagination.total == 0:
+        message = 'Không tìm thấy kết quả phù hợp'
+
     return render_template(
         'browse/search.html',
-        keyword=keyword.strip(),
+        keyword=keyword,
         results=results,
-        pagination=pagination
+        pagination=pagination,
+        sort=sort,
+        message=message
     )
 
 
 @browse_bp.route('/restaurant/<int:restaurant_id>')
 def restaurant_menu_view(restaurant_id):
-    # Kiểm tra nhà hàng có tồn tại,
-    # đã được duyệt và đang hoạt động hay không.
     restaurant = dao.get_approved_restaurant(
         restaurant_id
     )
 
-    # Không tìm thấy thì trả về 404
+
     if not restaurant:
         abort(404)
 
-    # Lấy menu của nhà hàng
+
     menu = dao.get_restaurant_menu(
         restaurant_id
     )

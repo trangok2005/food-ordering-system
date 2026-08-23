@@ -7,6 +7,7 @@ from flask import (
     redirect,
     url_for,
     flash,
+<<<<<<< Updated upstream
     session
 )
 
@@ -15,19 +16,56 @@ from flask_login import (
     current_user
 )
 
+=======
+    session,
+    abort,
+    jsonify
+)
+from flask_login import login_required, current_user
+
+>>>>>>> Stashed changes
 from app.cart import cart_bp
 from app.cart import dao
 from app.cart import payos
 
 
+<<<<<<< Updated upstream
+=======
+@cart_bp.before_request
+def _block_restaurant_ordering():
+    """
+    Tài khoản nhà hàng (RESTAURANT) chỉ quản lý đơn,
+    KHÔNG được thao tác giỏ hàng / thanh toán như khách hàng.
+    """
+
+    if (
+        current_user.is_authenticated
+        and current_user.role
+        and current_user.role.name == 'RESTAURANT'
+    ):
+        abort(403)
+
+
+>>>>>>> Stashed changes
 def _gen_order_code():
+    """
+    Sinh mã orderCode dùng cho PayOS.
+
+    PayOS yêu cầu orderCode là số nguyên.
+    """
+
     return secrets.randbelow(900000000) + 100000000
 
 
 def _app_url(path):
+    """
+    Chuyển path thành URL đầy đủ dựa trên host hiện tại.
+    """
+
     return request.host_url.rstrip('/') + path
 
 
+<<<<<<< Updated upstream
 def _poll_payment_status(
     payment_request_id,
     tries=10,
@@ -38,16 +76,37 @@ def _poll_payment_status(
     Dùng polling thay cho webhook khi chạy localhost.
     """
 
+=======
+def _poll_payment_status(payment_request_id, tries=10, delay=1.0):
+    """
+    Kiểm tra trạng thái PayOS nhiều lần.
+
+    Dùng polling thay cho webhook khi chạy localhost.
+    """
+
+    if not payment_request_id:
+        return 'PENDING'
+
+>>>>>>> Stashed changes
     client = payos.get_client()
 
     for _ in range(tries):
         try:
+<<<<<<< Updated upstream
             status = (
                 client
                 .get_payment_request(payment_request_id)
                 .get('status')
             )
 
+=======
+            response = client.get_payment_request(
+                payment_request_id
+            )
+
+            status = response.get('status')
+
+>>>>>>> Stashed changes
             if status in (
                 'PAID',
                 'FAILED',
@@ -66,9 +125,13 @@ def _poll_payment_status(
 @cart_bp.route('/')
 @login_required
 def cart_view():
+<<<<<<< Updated upstream
     carts = dao.get_user_carts(
         current_user.id
     )
+=======
+    carts = dao.get_user_carts(current_user.id)
+>>>>>>> Stashed changes
 
     return render_template(
         'cart.html',
@@ -79,9 +142,13 @@ def cart_view():
 @cart_bp.route('/checkout')
 @login_required
 def checkout_view():
+<<<<<<< Updated upstream
     carts = dao.get_user_carts(
         current_user.id
     )
+=======
+    carts = dao.get_user_carts(current_user.id)
+>>>>>>> Stashed changes
 
     total = sum(
         c.total_amount()
@@ -146,6 +213,46 @@ def create_payment():
         return redirect(
             url_for('cart.checkout_view')
         )
+<<<<<<< Updated upstream
+=======
+
+    # Nếu có lat/lng thì phải có đủ cả hai
+    if (
+        (lat is None and lng is not None)
+        or
+        (lat is not None and lng is None)
+    ):
+        flash(
+            'Tọa độ giao hàng không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.checkout_view')
+        )
+
+    # Kiểm tra phạm vi GPS hợp lệ
+    if lat is not None and lng is not None:
+        if not (-90 <= lat <= 90):
+            flash(
+                'Vĩ độ không hợp lệ',
+                'error'
+            )
+
+            return redirect(
+                url_for('cart.checkout_view')
+            )
+
+        if not (-180 <= lng <= 180):
+            flash(
+                'Kinh độ không hợp lệ',
+                'error'
+            )
+
+            return redirect(
+                url_for('cart.checkout_view')
+            )
+>>>>>>> Stashed changes
 
     try:
         pending = dao.build_checkout_payload(
@@ -163,6 +270,19 @@ def create_payment():
         return redirect(
             url_for('cart.checkout_view')
         )
+<<<<<<< Updated upstream
+=======
+
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi kiểm tra giỏ hàng, vui lòng thử lại sau',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.checkout_view')
+        )
+>>>>>>> Stashed changes
 
     code = _gen_order_code()
 
@@ -192,6 +312,40 @@ def create_payment():
         return redirect(
             url_for('cart.checkout_view')
         )
+<<<<<<< Updated upstream
+=======
+
+    # Kiểm tra PayOS trả về payment link hợp lệ
+    if not link:
+        flash(
+            'PayOS không trả về thông tin thanh toán',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.checkout_view')
+        )
+
+    if not link.get('id'):
+        flash(
+            'PayOS không trả về mã thanh toán',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.checkout_view')
+        )
+
+    if not link.get('checkoutUrl'):
+        flash(
+            'PayOS không trả về đường dẫn thanh toán',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.checkout_view')
+        )
+>>>>>>> Stashed changes
 
     pending.update({
         'order_code': code,
@@ -202,9 +356,16 @@ def create_payment():
         'lat': lat,
         'lng': lng,
     })
+<<<<<<< Updated upstream
 
     session['pending_payment'] = pending
 
+=======
+
+    session['pending_payment'] = pending
+    session.modified = True
+
+>>>>>>> Stashed changes
     return redirect(
         link['checkoutUrl']
     )
@@ -215,6 +376,7 @@ def create_payment():
 def payment_return():
     """
     PayOS chuyển trình duyệt về đây sau thanh toán.
+<<<<<<< Updated upstream
 
     Kiểm tra trạng thái:
     PAID -> tạo Order -> xóa Cart.
@@ -224,6 +386,15 @@ def payment_return():
         'id'
     )
 
+=======
+    PAID:
+        tạo Order
+        -> xóa Cart
+    Không tạo Order nếu chưa PAID.
+    """
+
+    payment_request_id = request.args.get('id')
+>>>>>>> Stashed changes
     pending = session.get(
         'pending_payment'
     )
@@ -233,6 +404,22 @@ def payment_return():
             url_for('cart.cart_view')
         )
 
+<<<<<<< Updated upstream
+=======
+    if (
+        pending.get('payment_request_id')
+        != payment_request_id
+    ):
+        flash(
+            'Thông tin thanh toán không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+
+>>>>>>> Stashed changes
     status = _poll_payment_status(
         payment_request_id
     )
@@ -243,6 +430,7 @@ def payment_return():
                 current_user.id,
                 pending
             )
+<<<<<<< Updated upstream
 
         except Exception as e:
             flash(
@@ -254,6 +442,29 @@ def payment_return():
                 url_for('cart.cart_view')
             )
 
+=======
+
+        except ValueError as e:
+            flash(
+                str(e),
+                'error'
+            )
+
+            return redirect(
+                url_for('cart.cart_view')
+            )
+
+        except Exception:
+            flash(
+                'Thanh toán thành công nhưng lỗi tạo đơn, vui lòng liên hệ hỗ trợ',
+                'error'
+            )
+
+            return redirect(
+                url_for('cart.cart_view')
+            )
+
+>>>>>>> Stashed changes
         session.pop(
             'pending_payment',
             None
@@ -296,6 +507,7 @@ def my_orders():
         current_user.id
     )
 
+<<<<<<< Updated upstream
     return render_template(
         'my_orders.html',
         orders=orders
@@ -306,6 +518,37 @@ def my_orders():
     '/add',
     methods=['POST']
 )
+=======
+    from app.ai import dao as ai_dao
+
+    reviewed = ai_dao.get_reviewed_dish_ids_for_orders(
+        [o.id for o in orders]
+    )
+
+    return render_template(
+        'my_orders.html',
+        orders=orders,
+        reviewed=reviewed
+    )
+
+
+@cart_bp.route('/api/stats')
+@login_required
+def cart_stats_api():
+    """
+    Trả về số lượng món trong giỏ hàng
+    của user để hiển thị header badge.
+    """
+
+    stats = dao.get_cart_stats(
+        current_user.id
+    )
+
+    return jsonify(stats)
+
+
+@cart_bp.route('/add', methods=['POST'])
+>>>>>>> Stashed changes
 @login_required
 def add_to_cart():
     dish_id = request.form.get(
@@ -318,6 +561,31 @@ def add_to_cart():
         1,
         type=int
     )
+<<<<<<< Updated upstream
+=======
+
+    if not dish_id:
+        flash(
+            'Món ăn không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            request.referrer
+            or url_for('cart.cart_view')
+        )
+
+    if not quantity or quantity < 1:
+        flash(
+            'Số lượng không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            request.referrer
+            or url_for('cart.cart_view')
+        )
+>>>>>>> Stashed changes
 
     try:
         dao.add_to_cart(
@@ -330,22 +598,136 @@ def add_to_cart():
             'Đã thêm vào giỏ hàng'
         )
 
+<<<<<<< Updated upstream
     except ValueError as e:
         flash(
             str(e),
             'error'
         )
 
+=======
+    except dao.CartRestaurantConflict as e:
+        referrer = request.referrer
+
+        return_path = (
+            urlparse(referrer).path
+            if referrer
+            else None
+        )
+
+        return render_template(
+            'cart_confirm.html',
+            current_restaurant=e.current_restaurant,
+            dish_id=dish_id,
+            quantity=quantity,
+            return_url=return_path
+        )
+
+    except ValueError as e:
+        flash(
+            str(e),
+            'error'
+        )
+
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi thêm món vào giỏ hàng',
+            'error'
+        )
+
+>>>>>>> Stashed changes
     return redirect(
         request.referrer
         or url_for('cart.cart_view')
     )
 
 
+<<<<<<< Updated upstream
 @cart_bp.route(
     '/update',
     methods=['POST']
 )
+=======
+@cart_bp.route('/confirm-switch', methods=['POST'])
+@login_required
+def confirm_switch():
+    dish_id = request.form.get(
+        'dish_id',
+        type=int
+    )
+
+    quantity = request.form.get(
+        'quantity',
+        1,
+        type=int
+    )
+
+    return_url = request.form.get(
+        'return_url'
+    )
+
+    if not dish_id:
+        flash(
+            'Món ăn không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+
+    if not quantity or quantity < 1:
+        flash(
+            'Số lượng không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+
+    if not (
+        return_url
+        and return_url.startswith('/')
+        and not return_url.startswith('//')
+    ):
+        return_url = None
+
+    try:
+        dao.clear_all_carts(
+            current_user.id
+        )
+
+        dao.add_to_cart(
+            current_user.id,
+            dish_id,
+            quantity
+        )
+
+        flash(
+            'Đã xóa giỏ cũ và thêm món mới'
+        )
+
+    except ValueError as e:
+        flash(
+            str(e),
+            'error'
+        )
+
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi chuyển giỏ hàng',
+            'error'
+        )
+
+    return redirect(
+        return_url
+        or url_for('cart.cart_view')
+    )
+
+
+@cart_bp.route('/update', methods=['POST'])
+>>>>>>> Stashed changes
 @login_required
 def update_cart_item():
     item_id = request.form.get(
@@ -357,6 +739,29 @@ def update_cart_item():
         'quantity',
         type=int
     )
+<<<<<<< Updated upstream
+=======
+
+    if not item_id:
+        flash(
+            'Sản phẩm không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+
+    if not quantity or quantity < 1:
+        flash(
+            'Số lượng không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+>>>>>>> Stashed changes
 
     try:
         dao.update_cart_item(
@@ -364,6 +769,7 @@ def update_cart_item():
             item_id,
             quantity
         )
+<<<<<<< Updated upstream
 
         flash(
             'Đã cập nhật giỏ hàng'
@@ -375,6 +781,25 @@ def update_cart_item():
             'error'
         )
 
+=======
+
+        flash(
+            'Đã cập nhật giỏ hàng'
+        )
+
+    except ValueError as e:
+        flash(
+            str(e),
+            'error'
+        )
+
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi cập nhật giỏ hàng',
+            'error'
+        )
+
+>>>>>>> Stashed changes
     return redirect(
         url_for('cart.cart_view')
     )
@@ -390,12 +815,26 @@ def remove_cart_item():
         'item_id',
         type=int
     )
+<<<<<<< Updated upstream
+=======
+
+    if not item_id:
+        flash(
+            'Sản phẩm không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+>>>>>>> Stashed changes
 
     try:
         dao.remove_cart_item(
             current_user.id,
             item_id
         )
+<<<<<<< Updated upstream
 
         flash(
             'Đã xóa khỏi giỏ hàng'
@@ -407,6 +846,25 @@ def remove_cart_item():
             'error'
         )
 
+=======
+
+        flash(
+            'Đã xóa khỏi giỏ hàng'
+        )
+
+    except ValueError as e:
+        flash(
+            str(e),
+            'error'
+        )
+
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi xóa sản phẩm',
+            'error'
+        )
+
+>>>>>>> Stashed changes
     return redirect(
         url_for('cart.cart_view')
     )
@@ -422,6 +880,19 @@ def clear_cart():
         'cart_id',
         type=int
     )
+<<<<<<< Updated upstream
+=======
+
+    if not cart_id:
+        flash(
+            'Giỏ hàng không hợp lệ',
+            'error'
+        )
+
+        return redirect(
+            url_for('cart.cart_view')
+        )
+>>>>>>> Stashed changes
 
     try:
         dao.clear_cart(
@@ -439,6 +910,15 @@ def clear_cart():
             'error'
         )
 
+<<<<<<< Updated upstream
+=======
+    except Exception:
+        flash(
+            'Có lỗi xảy ra khi xóa giỏ hàng',
+            'error'
+        )
+
+>>>>>>> Stashed changes
     return redirect(
         url_for('cart.cart_view')
     )
