@@ -63,7 +63,7 @@ def _parse_float(raw):
         return None
 
 
-# ---------- QUẢN LÝ THỰC ĐƠN (CATEGORY / DISH) ----------
+
 
 def get_categories(restaurant_id):
     return (Category.query

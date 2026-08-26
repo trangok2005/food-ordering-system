@@ -23,7 +23,6 @@ CATEGORY_AFFINITY_RATIO = 0.5
 
 
 def _score_interactions(interactions):
-    """Trả về (dish_scores, category_scores, hour_map)."""
     dish_scores = defaultdict(float)
     category_scores = defaultdict(float)
     hour_map = defaultdict(set)
@@ -41,7 +40,6 @@ def _score_interactions(interactions):
 
 
 def _hour_bonus(hour_map_for_dish, now_hour):
-    """Cộng thưởng nếu user thường tương tác món này đúng khung giờ hiện tại."""
     if not hour_map_for_dish:
         return 0.0
     for h in hour_map_for_dish:
@@ -54,10 +52,10 @@ def _available_query():
     from app.models import Restaurant, RestaurantStatus
     return (Dish.query
             .join(Restaurant, Dish.restaurant_id == Restaurant.id)
-            .filter(Dish.active == True,               # noqa: E712
-                    Dish.is_available == True,          # noqa: E712
+            .filter(Dish.active == True,
+                    Dish.is_available == True,
                     Restaurant.status == RestaurantStatus.APPROVED,
-                    Restaurant.is_open == True))        # noqa: E712
+                    Restaurant.is_open == True))
 
 
 def get_popular_dishes(limit=8, exclude_ids=None):
