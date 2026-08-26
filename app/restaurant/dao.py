@@ -3,10 +3,14 @@ from datetime import datetime
 from sqlalchemy import func
 
 from app import db
-from app.models import (Category, Dish, Order, OrderDetail, OrderStatus,
-                        PaymentStatus, Restaurant, RestaurantStatus, User,
-                        UserRole)
-
+from app.models import (
+    Category,
+    Dish,
+    Order,
+    OrderStatus,
+    Restaurant,
+    RestaurantStatus,
+)
 
 NEXT_STATUS = {
     OrderStatus.CONFIRMED: OrderStatus.PREPARING,
@@ -14,14 +18,10 @@ NEXT_STATUS = {
     OrderStatus.DELIVERING: OrderStatus.COMPLETED,
 }
 
-
 def get_restaurant_for_owner(user_id):
     return Restaurant.query.filter(Restaurant.owner_id == user_id).first()
 
-
 def register_restaurant(owner, data):
-    """Nhà hàng tự đăng ký: tạo Restaurant ở trạng thái PENDING,
-    chờ admin duyệt. owner là User có role RESTAURANT đã đăng ký."""
     if get_restaurant_for_owner(owner.id):
         raise ValueError('Tài khoản này đã đăng ký nhà hàng rồi')
 
@@ -52,7 +52,6 @@ def register_restaurant(owner, data):
     db.session.commit()
     return restaurant
 
-
 def _parse_float(raw):
     raw = (raw or '').strip()
     if not raw:
@@ -62,19 +61,13 @@ def _parse_float(raw):
     except (TypeError, ValueError):
         return None
 
-
-
-
 def get_categories(restaurant_id):
     return (Category.query
             .filter(Category.restaurant_id == restaurant_id)
             .order_by(Category.name)
             .all())
 
-
 def add_category(restaurant, name):
-    """Thêm danh mục cho nhà hàng. Tên danh mục không được trùng
-    trong cùng 1 nhà hàng (ràng buộc unique theo cặp name + restaurant)."""
     name = (name or '').strip()
     if not name:
         raise ValueError('Vui lòng nhập tên danh mục')
@@ -92,7 +85,6 @@ def add_category(restaurant, name):
     db.session.add(category)
     db.session.commit()
     return category
-
 
 def rename_category(restaurant, category_id, name):
     category = _get_category(category_id, restaurant.id)
@@ -112,10 +104,7 @@ def rename_category(restaurant, category_id, name):
     db.session.commit()
     return category
 
-
 def delete_category(restaurant, category_id):
-    """Xóa danh mục. Chỉ xóa được khi danh mục không còn món nào
-    để tránh mất món ăn do thao tác nhầm."""
     category = _get_category(category_id, restaurant.id)
     active_dishes = [d for d in category.dishes if d.active]
     if active_dishes:
@@ -123,13 +112,11 @@ def delete_category(restaurant, category_id):
     db.session.delete(category)
     db.session.commit()
 
-
 def _get_category(category_id, restaurant_id):
     return (Category.query
             .filter(Category.id == category_id,
                     Category.restaurant_id == restaurant_id)
             .first())
-
 
 def _validate_dish_input(name, price, category_id, restaurant):
     name = (name or '').strip()
@@ -151,7 +138,6 @@ def _validate_dish_input(name, price, category_id, restaurant):
 
     return name.strip(), price, category
 
-
 def add_dish(restaurant, form):
     name, price, category = _validate_dish_input(
         form.get('name'), form.get('price'), form.get('category_id'), restaurant)
@@ -169,7 +155,6 @@ def add_dish(restaurant, form):
     db.session.commit()
     return dish
 
-
 def update_dish(restaurant, dish_id, form):
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
     if not dish:
@@ -186,10 +171,7 @@ def update_dish(restaurant, dish_id, form):
     db.session.commit()
     return dish
 
-
 def toggle_dish_availability(restaurant, dish_id):
-    """Ẩn/hiện món khi hết hàng hoặc nhập thêm hàng.
-    Món hết hàng vẫn giữ trong giỏ của khách, chỉ chặn ở bước thanh toán."""
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
     if not dish:
         raise ValueError('Món ăn không tồn tại')
@@ -197,17 +179,13 @@ def toggle_dish_availability(restaurant, dish_id):
     db.session.commit()
     return dish
 
-
 def delete_dish(restaurant, dish_id):
-    """Soft-delete món: chỉ ẩn khỏi thực đơn, giữ lại dữ liệu cho
-    các đơn hàng / đánh giá cũ."""
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
     if not dish:
         raise ValueError('Món ăn không tồn tại')
     dish.active = False
     dish.is_available = False
     db.session.commit()
-
 
 def get_dish_for_restaurant(dish_id, restaurant_id):
     return (Dish.query
@@ -216,15 +194,12 @@ def get_dish_for_restaurant(dish_id, restaurant_id):
                     Dish.active == True)   # noqa: E712
             .first())
 
-
 def get_all_dishes(restaurant_id):
-    """Toàn bộ món đang hoạt động (kể cả món đang ẩn) - dùng cho trang quản lý."""
     return (Dish.query
             .filter(Dish.restaurant_id == restaurant_id,
                     Dish.active == True)   # noqa: E712
             .order_by(Dish.category_id, Dish.name)
             .all())
-
 
 def get_restaurant_orders(restaurant_id, status=None):
     query = Order.query.filter(Order.restaurant_id == restaurant_id)
@@ -232,15 +207,12 @@ def get_restaurant_orders(restaurant_id, status=None):
         query = query.filter(Order.status == status)
     return query.order_by(Order.created_date.desc(), Order.id.desc()).all()
 
-
 def get_order_status_counts(restaurant_id):
-    """Số đơn theo từng trạng thái, dùng cho tab lọc trên dashboard."""
     rows = (db.session.query(Order.status, func.count(Order.id))
             .filter(Order.restaurant_id == restaurant_id)
             .group_by(Order.status)
             .all())
     return {status: count for status, count in rows}
-
 
 def get_order_for_restaurant(order_id, restaurant_id):
     return (Order.query
@@ -248,10 +220,7 @@ def get_order_for_restaurant(order_id, restaurant_id):
                     Order.restaurant_id == restaurant_id)
             .first())
 
-
 def expire_overdue_orders(restaurant_id):
-    """Chuyển các đơn PENDING đã quá hạn xác nhận thành EXPIRED.
-    Được gọi mỗi khi nhà hàng mở trang quản lý đơn (không có job nền)."""
     now = datetime.now()
     overdue = (Order.query
                .filter(Order.restaurant_id == restaurant_id,
@@ -265,10 +234,7 @@ def expire_overdue_orders(restaurant_id):
         db.session.commit()
     return overdue
 
-
 def confirm_order(order):
-    """Nhà hàng xác nhận đơn đang PENDING -> CONFIRMED.
-    Chỉ được xác nhận trước confirm_deadline; quá hạn thì đơn đã EXPIRED."""
     if order.is_expired():
         order.status = OrderStatus.EXPIRED
         db.session.commit()
@@ -281,10 +247,7 @@ def confirm_order(order):
     db.session.commit()
     return order
 
-
 def advance_order(order):
-    """Chuyển đơn sang trạng thái tiếp theo:
-    CONFIRMED -> PREPARING -> DELIVERING -> COMPLETED."""
     next_status = NEXT_STATUS.get(order.status)
     if not next_status:
         raise ValueError('Trạng thái hiện tại của đơn không thể chuyển tiếp')
@@ -292,11 +255,7 @@ def advance_order(order):
     db.session.commit()
     return order
 
-
 def cancel_order(order, reason):
-    """Nhà hàng hủy đơn đã thanh toán (hết nguyên liệu, quá tải...).
-    Chỉ lưu trạng thái + lý do; việc hoàn tiền nhà hàng tự liên hệ
-    và thực hiện trực tiếp với khách, ngoài hệ thống."""
     reason = (reason or '').strip()
     if not reason:
         raise ValueError('Vui lòng nhập lý do hủy đơn')
@@ -309,21 +268,7 @@ def cancel_order(order, reason):
     db.session.commit()
     return order
 
-
-def mark_refunded(order):
-    """Đánh dấu đơn đã hủy là đã hoàn tiền - dùng SAU KHI nhà hàng đã tự
-    chuyển tiền cho khách ngoài hệ thống (chỉ lưu vết, không gọi API thật)."""
-    if order.status != OrderStatus.CANCELLED:
-        raise ValueError('Chỉ đơn đã hủy mới đánh dấu được hoàn tiền')
-    if order.payment_status == PaymentStatus.REFUNDED:
-        raise ValueError('Đơn này đã được đánh dấu hoàn tiền')
-    order.mark_refunded_manually()
-    db.session.commit()
-    return order
-
-
 def get_dashboard_stats(restaurant_id):
-    """Số liệu tổng quan cho trang dashboard nhà hàng."""
     counts = get_order_status_counts(restaurant_id)
     revenue = (db.session.query(func.coalesce(func.sum(Order.total_amount), 0))
                .filter(Order.restaurant_id == restaurant_id,
@@ -332,11 +277,7 @@ def get_dashboard_stats(restaurant_id):
                .scalar())
     return {'counts': counts, 'revenue': revenue}
 
-
 def update_restaurant_settings(restaurant, data):
-    """Cập nhật cấu hình nhà hàng: giá trị đơn tối thiểu, thời gian xác
-    nhận, bán kính giao hàng, số lượng tối đa 1 món/đơn, trạng thái mở cửa.
-    Trường để trống -> dùng mặc định hệ thống (None)."""
     phone = (data.get('phone') or '').strip()
     description = (data.get('description') or '').strip()
 
