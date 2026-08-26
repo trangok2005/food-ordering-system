@@ -5,7 +5,6 @@ from app.models import OrderStatus, PaymentStatus
 from app.restaurant import restaurant_bp, dao
 
 
-# Lấy nhà hàng của tài khoản đang đăng nhập
 def get_restaurant():
     if not current_user.is_authenticated:
         abort(403)
@@ -21,7 +20,6 @@ def get_restaurant():
     return restaurant
 
 
-# Lấy đơn hàng thuộc nhà hàng hiện tại
 def get_order(order_id, restaurant):
     order = dao.get_order_for_restaurant(order_id, restaurant.id)
 
@@ -31,7 +29,6 @@ def get_order(order_id, restaurant):
     return order
 
 
-# Đổi tên trạng thái sang OrderStatus
 def get_status(status_name):
     if status_name is None:
         return None
@@ -43,19 +40,15 @@ def get_status(status_name):
     return None
 
 
-# Trang tổng quan nhà hàng
 @restaurant_bp.route('/')
 @login_required
 def dashboard():
     restaurant = get_restaurant()
 
-    # Tự động hủy những đơn đã quá thời gian xác nhận
     dao.expire_overdue_orders(restaurant.id)
 
     stats = dao.get_dashboard_stats(restaurant.id)
     orders = dao.get_restaurant_orders(restaurant.id)
-
-    # Chỉ lấy 6 đơn đầu tiên để hiển thị trên dashboard
     orders = orders[:6]
 
     return render_template(
@@ -67,7 +60,6 @@ def dashboard():
     )
 
 
-# Cấu hình nhà hàng
 @restaurant_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
 def settings_view():
@@ -90,13 +82,11 @@ def settings_view():
     )
 
 
-# Danh sách đơn hàng
 @restaurant_bp.route('/orders')
 @login_required
 def orders_view():
     restaurant = get_restaurant()
 
-    # Kiểm tra những đơn đã quá thời gian xác nhận
     expired_orders = dao.expire_overdue_orders(restaurant.id)
 
     if expired_orders:
@@ -127,7 +117,6 @@ def orders_view():
     )
 
 
-# Xác nhận đơn hàng
 @restaurant_bp.route('/orders/<int:order_id>/confirm', methods=['POST'])
 @login_required
 def confirm_order(order_id):
@@ -136,7 +125,6 @@ def confirm_order(order_id):
 
     try:
         dao.confirm_order(order)
-
         flash(f'Đã xác nhận đơn #{order.id}')
 
     except ValueError as e:
@@ -145,7 +133,6 @@ def confirm_order(order_id):
     return redirect(url_for('restaurant.orders_view'))
 
 
-# Chuyển đơn sang trạng thái tiếp theo
 @restaurant_bp.route('/orders/<int:order_id>/advance', methods=['POST'])
 @login_required
 def advance_order(order_id):
@@ -166,7 +153,6 @@ def advance_order(order_id):
     return redirect(url_for('restaurant.orders_view'))
 
 
-# Hủy đơn hàng
 @restaurant_bp.route('/orders/<int:order_id>/cancel', methods=['POST'])
 @login_required
 def cancel_order(order_id):
@@ -177,7 +163,6 @@ def cancel_order(order_id):
 
     try:
         dao.cancel_order(order, reason)
-
         flash(f'Đã hủy đơn #{order.id}')
 
     except ValueError as e:
@@ -186,7 +171,6 @@ def cancel_order(order_id):
     return redirect(url_for('restaurant.orders_view'))
 
 
-# Đánh dấu đơn đã hoàn tiền
 @restaurant_bp.route('/orders/<int:order_id>/mark-refunded', methods=['POST'])
 @login_required
 def mark_refunded(order_id):
