@@ -8,6 +8,42 @@
   const latInput = document.getElementById("lat");
   const lngInput = document.getElementById("lng");
 
+  // Cửa sổ hủy miễn phí 10 giây (Quy tắc bắt buộc #5 - Project Charter):
+  // sau khi bấm "Đặt hàng", khách có 10 giây để hủy miễn phí; hết giờ,
+  // hệ thống TỰ ĐỘNG chuyển sang cổng thanh toán và không hỗ trợ hủy nữa.
+  const FREE_CANCEL_SECONDS = 10;
+  let countdownTimer = null;
+
+  function startFreeCancelWindow() {
+    const modalEl = document.getElementById("freeCancelModal");
+    if (!modalEl) {
+      form.submit();
+      return;
+    }
+    const counter = document.getElementById("cancelCountdown");
+    let secondsLeft = FREE_CANCEL_SECONDS;
+    counter.textContent = secondsLeft;
+
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    clearInterval(countdownTimer);
+    countdownTimer = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(countdownTimer);
+        modal.hide();
+        form.submit();
+        return;
+      }
+      counter.textContent = secondsLeft;
+    }, 1000);
+  }
+
+  function stopFreeCancelWindow() {
+    clearInterval(countdownTimer);
+  }
+
   if (confirmBtn) {
     confirmBtn.addEventListener("click", () => {
       if (confirmBtn.disabled) return;
@@ -15,7 +51,15 @@
         form.reportValidity();
         return;
       }
-      form.submit();
+      startFreeCancelWindow();
+    });
+  }
+
+  const freeCancelBtn = document.getElementById("freeCancelBtn");
+  if (freeCancelBtn) {
+    freeCancelBtn.addEventListener("click", () => {
+      stopFreeCancelWindow();
+      bootstrap.Modal.getInstance(document.getElementById("freeCancelModal")).hide();
     });
   }
 

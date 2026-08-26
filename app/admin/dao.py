@@ -2,7 +2,12 @@ from sqlalchemy import func
 
 from app import db
 from app.models import (Dish, Order, OrderDetail, OrderStatus, PaymentStatus,
-                        Restaurant, RestaurantStatus, User, UserRole)
+                        Restaurant, RestaurantStatus, SystemConfig,
+                        User, UserRole)
+
+
+# Bí danh ngắn cho cấu hình hệ thống
+SystemConfigModel = SystemConfig
 
 
 def get_dashboard_stats():
@@ -142,3 +147,98 @@ def unlock_restaurant(restaurant):
     restaurant.status = RestaurantStatus.APPROVED
     db.session.commit()
     return restaurant
+
+
+# ---------- QUẢN LÝ NGƯỜI DÙNG ----------
+
+def get_user_by_id(user_id):
+    return User.query.get(user_id)
+
+
+def get_users(role=None, keyword=None):
+    """Danh sách người dùng, lọc theo vai trò và từ khóa (username/email/tên)."""
+    query = User.query
+    if role:
+        query = query.filter(User.role == role)
+    kw = (keyword or '').strip()
+    if kw:
+        like = f'%{kw}%'
+        query = query.filter(db.or_(User.username.ilike(like),
+                                    User.email.ilike(like),
+                                    User.full_name.ilike(like)))
+    return query.order_by(User.id.desc()).all()
+
+
+def set_user_active(user, active):
+    """Khóa / mở khóa tài khoản (soft lock qua trường active).
+    Không cho admin tự khóa chính mình."""
+    if user.id == _current_admin_id():
+        raise ValueError('Không thể tự khóa tài khoản admin đang đăng nhập')
+    user.active = active
+    db.session.commit()
+    return user
+
+
+_current_admin_id_holder = {}
+
+
+def remember_admin_id(user_id):
+    """Lưu id admin đang thao tác để chặn tự khóa chính mình
+    (tránh truyền current_user sâu xuống DAO)."""
+    _current_admin_id_holder['id'] = user_id
+
+
+def _current_admin_id():
+    return _current_admin_id_holder.get('id')
+
+
+# ---------- CẤU HÌNH HỆ THỐNG ----------
+
+CONFIG_KEYS = {
+    'DEFAULT_CONFIRM_TIMEOUT_MINUTES': 'Thời gian xác nhận đơn mặc định (phút)',
+    'DEFAULT_MIN_ORDER_AMOUNT': 'Giá trị đơn tối thiểu mặc định (VNĐ)',
+    'MAX_QUANTITY_PER_ITEM': 'Số lượng tối đa 1 món/đơn',
+    'SEARCH_PAGE_SIZE': 'Số kết quả tìm kiếm mỗi trang',
+}
+
+
+def get_all_configs():
+    configs = {cfg.key: cfg for cfg in SystemConfigModel.query.all()}
+    result = []
+    for key, description in CONFIG_KEYS.items():
+        cfg = configs.get(key)
+        result.append({
+            'key': key,
+            'value': cfg.value if cfg else '',
+            'description': cfg.description if cfg else description,
+        })
+    return result
+
+
+def update_config(key, value):
+    value = (value or '').strip()
+    if key not in CONFIG_KEYS:
+        raise ValueError('Cấu hình không hợp lệ')
+    try:
+        int_value = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f'"{key}" phải là số nguyên')
+
+    minimums = {
+        'DEFAULT_CONFIRM_TIMEOUT_MINUTES': 1,
+        'DEFAULT_MIN_ORDER_AMOUNT': 0,
+        'MAX_QUANTITY_PER_ITEM': 1,
+        'SEARCH_PAGE_SIZE': 5,
+    }
+    if int_value < minimums[key]:
+        raise ValueError(f'"{key}" phải >= {minimums[key]}')
+
+    cfg = SystemConfigModel.query.get(key)
+    if not cfg:
+        cfg = SystemConfigModel(key=key, value=value,
+                                description=CONFIG_KEYS[key])
+        db.session.add(cfg)
+    else:
+        cfg.value = value
+    db.session.commit()
+    return cfg

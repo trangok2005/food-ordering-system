@@ -1,0 +1,60 @@
+{% extends 'layout/base.html' %}
+{% block title %}Thanh toán (PayOS Mock) | Food Ordering System{% endblock %}
+
+{% block content %}
+<section class="checkout-section">
+  <div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
+          <span class="fs-4">&#9888;</span>
+          <strong>Cổng thanh toán PayOS - CHẾ ĐỘ GIẢ LẬP (MOCK)</strong>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Đây là cổng thanh toán giả lập phục vụ demo trên localhost.
+            Không có giao dịch thật nào được thực hiện. Khi triển khai thật,
+            đặt <code>PAYOS_MODE=live</code> trong <code>.env</code>.
+          </p>
+
+          <dl class="row mb-4">
+            <dt class="col-5">Mã tham chiếu</dt>
+            <dd class="col-7">{{ payment.id }}</dd>
+            <dt class="col-5">Nội dung</dt>
+            <dd class="col-7">{{ payment.description }}</dd>
+            <dt class="col-5">Số tiền</dt>
+            <dd class="col-7 fw-bold fs-5 text-success">{{ payment.amount|vnd }}</dd>
+            <dt class="col-5">Trạng thái</dt>
+            <dd class="col-7">
+              {% if payment.status == 'PAID' %}
+              <span class="badge bg-success">Đã thanh toán</span>
+              {% elif payment.status == 'CANCELLED' %}
+              <span class="badge bg-danger">Đã hủy</span>
+              {% else %}
+              <span class="badge bg-secondary">Chờ thanh toán</span>
+              {% endif %}
+            </dd>
+          </dl>
+
+          {% if payment.status == 'PENDING' %}
+          <div class="d-grid gap-2">
+            <form method="post" action="{{ url_for('cart.mock_pay', payment_id=payment.id) }}">
+              <button type="submit" class="btn btn-primary btn-lg w-100">
+                &#9989; Giả lập thanh toán thành công
+              </button>
+            </form>
+            <form method="post" action="{{ url_for('cart.mock_cancel', payment_id=payment.id) }}">
+              <button type="submit" class="btn btn-outline-danger w-100">Hủy thanh toán</button>
+            </form>
+          </div>
+          {% else %}
+          <a href="{{ url_for('cart.cart_view') }}" class="btn btn-outline-secondary w-100">
+            Về giỏ hàng
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

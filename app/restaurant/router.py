@@ -1,7 +1,8 @@
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
+from app import db
 
-from app.models import OrderStatus, PaymentStatus
+from app.models import OrderStatus, PaymentStatus, UserRole
 from app.restaurant import restaurant_bp
 from app.restaurant import dao
 
@@ -44,6 +45,146 @@ def dashboard():
                            stats=stats,
                            orders=orders,
                            active='dashboard')
+
+
+@restaurant_bp.route('/register', methods=['GET', 'POST'])
+@login_required
+def register_restaurant_view():
+    """Nhà hàng tự đăng ký: tài khoản khách hàng điền thông tin nhà hàng,
+    hệ thống nâng quyền lên RESTAURANT và tạo nhà hàng chờ admin duyệt."""
+    if current_user.role.name == 'RESTAURANT':
+        return redirect(url_for('restaurant.dashboard'))
+    if current_user.role.name == 'ADMIN':
+        abort(403)
+
+    if request.method == 'POST':
+        try:
+            dao.register_restaurant(current_user, request.form)
+            current_user.role = UserRole.RESTAURANT
+            db.session.commit()
+            flash('Đăng ký nhà hàng thành công! Vui lòng chờ quản trị viên duyệt.')
+            return redirect(url_for('auth.logout_process'))
+        except ValueError as e:
+            flash(str(e), 'error')
+
+    return render_template('restaurant/register.html')
+
+
+@restaurant_bp.route('/menu')
+@login_required
+def menu_view():
+    """Trang quản lý thực đơn: danh mục + toàn bộ món ăn của nhà hàng."""
+    restaurant = _current_restaurant()
+    categories = dao.get_categories(restaurant.id)
+    dishes = dao.get_all_dishes(restaurant.id)
+    return render_template('restaurant/menu.html',
+                           restaurant=restaurant,
+                           categories=categories,
+                           dishes=dishes,
+                           active='menu')
+
+
+@restaurant_bp.route('/categories/add', methods=['POST'])
+@login_required
+def add_category():
+    restaurant = _current_restaurant()
+    try:
+        dao.add_category(restaurant, request.form.get('name'))
+        flash('Đã thêm danh mục')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/categories/<int:category_id>/rename', methods=['POST'])
+@login_required
+def rename_category(category_id):
+    restaurant = _current_restaurant()
+    try:
+        dao.rename_category(restaurant, category_id, request.form.get('name'))
+        flash('Đã đổi tên danh mục')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/categories/<int:category_id>/delete', methods=['POST'])
+@login_required
+def delete_category(category_id):
+    restaurant = _current_restaurant()
+    try:
+        dao.delete_category(restaurant, category_id)
+        flash('Đã xóa danh mục')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/dishes/add', methods=['POST'])
+@login_required
+def add_dish():
+    restaurant = _current_restaurant()
+    try:
+        dish = dao.add_dish(restaurant, request.form)
+        flash(f'Đã thêm món "{dish.name}"')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>/update', methods=['POST'])
+@login_required
+def update_dish(dish_id):
+    restaurant = _current_restaurant()
+    try:
+        dao.update_dish(restaurant, dish_id, request.form)
+        flash('Đã cập nhật món ăn')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>/toggle', methods=['POST'])
+@login_required
+def toggle_dish(dish_id):
+    restaurant = _current_restaurant()
+    try:
+        dish = dao.toggle_dish_availability(restaurant, dish_id)
+        state = 'đang bán' if dish.is_available else 'tạm ẩn (hết hàng)'
+        flash(f'Món "{dish.name}" đã chuyển sang {state}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>/delete', methods=['POST'])
+@login_required
+def delete_dish(dish_id):
+    restaurant = _current_restaurant()
+    try:
+        dao.delete_dish(restaurant, dish_id)
+        flash('Đã xóa món khỏi thực đơn')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/ai/recompute-pairings', methods=['POST'])
+@login_required
+def recompute_pairings():
+    """Tính lại luật kết hợp món đi kèm (association rules) từ các
+    đơn đã hoàn thành của nhà hàng - phục vụ gợi ý "món ăn kèm"."""
+    restaurant = _current_restaurant()
+    try:
+        from app.ai import pairing
+        rule_count = pairing.recompute_restaurant_pairings(restaurant.id)
+        if rule_count:
+            flash(f'Đã cập nhật {rule_count} luật kết hợp món ăn')
+        else:
+            flash('Chưa đủ dữ liệu đơn hoàn thành để tìm ra luật kết hợp (cần đơn có từ 2 món trở lên)', 'warning')
+    except Exception as e:
+        flash(f'Không cập nhật được luật kết hợp: {e}', 'error')
+    return redirect(url_for('restaurant.dashboard'))
 
 
 @restaurant_bp.route('/settings', methods=['GET', 'POST'])

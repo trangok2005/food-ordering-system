@@ -139,6 +139,31 @@
   </div>
   {% endif %}
 </section>
+
+<!-- Cửa sổ hủy miễn phí 10 giây: khách có thể hủy trước khi chuyển sang
+     cổng thanh toán; hết 10 giây hệ thống tự động chuyển tiếp. -->
+<div class="modal fade" id="freeCancelModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">Xác nhận đặt hàng</h5>
+      </div>
+      <div class="modal-body text-center py-4">
+        <p class="fs-5 mb-1">Đơn của bạn sẽ được chuyển tới cổng thanh toán sau</p>
+        <div class="display-4 fw-bold text-danger" id="cancelCountdown">10</div>
+        <p class="text-muted small mt-2 mb-0">
+          Bạn còn <strong>10 giây hủy miễn phí</strong>. Sau khi thanh toán,
+          việc hủy đơn chỉ do nhà hàng quyết định (tự hoàn tiền trực tiếp với bạn).
+        </p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-outline-danger w-100" id="freeCancelBtn">
+          Hủy đơn (miễn phí)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

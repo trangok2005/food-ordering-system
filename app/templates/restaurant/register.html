@@ -1,0 +1,92 @@
+{% extends 'layout/base.html' %}
+{% block title %}Đăng ký nhà hàng | Food Ordering System{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-7">
+      <div class="card shadow-sm">
+        <div class="card-body p-4">
+          <h3 class="mb-1">Đăng ký nhà hàng</h3>
+          <p class="text-muted">
+            Điền thông tin nhà hàng để bắt đầu bán món ăn trên TvT-food.
+            Sau khi gửi, quản trị viên sẽ duyệt trong vòng 24 giờ.
+          </p>
+
+          <form method="post" novalidate>
+            <div class="mb-3">
+              <label class="form-label">Tên nhà hàng <span class="text-danger">*</span></label>
+              <input type="text" name="name" class="form-control" required maxlength="255"
+                     placeholder="vd: Sushi House" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Địa chỉ <span class="text-danger">*</span></label>
+              <input type="text" name="address" class="form-control" required maxlength="255"
+                     placeholder="Số nhà, đường, quận/huyện" />
+            </div>
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Số điện thoại</label>
+                <input type="tel" name="phone" class="form-control" maxlength="11"
+                       placeholder="10-11 ký số" />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Mô tả ngắn</label>
+                <input type="text" name="description" class="form-control" maxlength="255"
+                       placeholder="Món đặc trưng của nhà hàng" />
+              </div>
+            </div>
+
+            <div class="alert alert-secondary small mb-3">
+              <strong>Tọa độ GPS:</strong> bấm nút bên dưới để lấy vị trí hiện tại từ trình duyệt
+              (dùng tính khoảng cách giao hàng đường chim bay). Có thể điền tay nếu trình duyệt
+              không hỗ trợ định vị.
+              <div class="d-flex gap-2 mt-2 flex-wrap">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnGps">
+                  &#128205; Dùng vị trí hiện tại
+                </button>
+                <span id="gpsStatus" class="align-self-center text-muted small"></span>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Vĩ độ (latitude)</label>
+                <input type="text" name="latitude" id="latInput" class="form-control"
+                       placeholder="vd: 10.7769" />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Kinh độ (longitude)</label>
+                <input type="text" name="longitude" id="lngInput" class="form-control"
+                       placeholder="vd: 106.7009" />
+              </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 py-2">Gửi đăng ký</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('btnGps').addEventListener('click', function () {
+    const status = document.getElementById('gpsStatus');
+    if (!navigator.geolocation) {
+      status.textContent = 'Trình duyệt không hỗ trợ định vị.';
+      return;
+    }
+    status.textContent = 'Đang lấy vị trí...';
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      document.getElementById('latInput').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('lngInput').value = pos.coords.longitude.toFixed(6);
+      status.textContent = 'Đã lấy tọa độ GPS.';
+    }, function () {
+      status.textContent = 'Không lấy được vị trí, hãy điền tay.';
+    });
+  });
+</script>
+{% endblock %}

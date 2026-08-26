@@ -1,0 +1,78 @@
+{% extends 'layout/base.html' %}
+{% block title %}Quản lý người dùng | Food Ordering System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-3">Quản lý người dùng</h2>
+  {% include 'admin/_nav.html' %}
+
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-4">
+      <input type="text" name="q" value="{{ keyword }}" class="form-control"
+             placeholder="Tìm theo username / email / tên..." />
+    </div>
+    <div class="col-md-3">
+      <select name="role" class="form-select">
+        <option value="">Tất cả vai trò</option>
+        {% for role in roles %}
+        <option value="{{ role.name }}" {{ 'selected' if current_role == role }}>{{ role.value }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary w-100">Lọc</button>
+    </div>
+  </form>
+
+  {% if users %}
+  <div class="table-responsive">
+    <table class="table table-hover align-middle bg-white shadow-sm">
+      <thead>
+        <tr>
+          <th>#</th><th>Tài khoản</th><th>Vai trò</th><th>Liên hệ</th>
+          <th>Trạng thái</th><th style="width: 130px;">Thao tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr class="{{ 'table-light text-muted' if not user.active }}">
+          <td>{{ user.id }}</td>
+          <td>
+            <strong>{{ user.username }}</strong>
+            <small class="d-block text-muted">{{ user.email }}</small>
+          </td>
+          <td><span class="badge bg-dark">{{ user.role.value }}</span></td>
+          <td>
+            <small>{{ user.full_name or '' }}<br />{{ user.phone or '' }}</small>
+          </td>
+          <td>
+            {% if user.is_locked() %}
+            <span class="badge bg-warning text-dark">Bị khóa tạm (đăng nhập sai)</span>
+            {% elif user.active %}
+            <span class="badge bg-success">Hoạt động</span>
+            {% else %}
+            <span class="badge bg-secondary">Đã khóa</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if user.active %}
+            <form method="post" action="{{ url_for('admin.lock_user_view', user_id=user.id) }}"
+                  onsubmit="return confirm('Khóa tài khoản {{ user.username }}?')">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Khóa</button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('admin.unlock_user_view', user_id=user.id) }}">
+              <button type="submit" class="btn btn-sm btn-outline-success">Mở khóa</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state"><p>Không tìm thấy người dùng nào phù hợp.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

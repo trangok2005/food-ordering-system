@@ -1,7 +1,7 @@
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.models import OrderStatus, RestaurantStatus
+from app.models import OrderStatus, RestaurantStatus, UserRole
 from app.admin import admin_bp
 from app.admin import dao
 
@@ -104,3 +104,72 @@ def unlock_restaurant_view(restaurant_id):
     except ValueError as e:
         flash(str(e), 'error')
     return redirect(url_for('admin.restaurants_view'))
+
+
+# ---------- QUẢN LÝ NGƯỜI DÙNG ----------
+
+def _role_from_name(name):
+    if not name:
+        return None
+    for member in UserRole:
+        if member.name == name:
+            return member
+    return None
+
+
+@admin_bp.route('/users')
+def users_view():
+    role = _role_from_name(request.args.get('role'))
+    keyword = request.args.get('q', '')
+    users = dao.get_users(role=role, keyword=keyword)
+    return render_template('admin/users.html',
+                           users=users,
+                           roles=UserRole,
+                           current_role=role,
+                           keyword=keyword,
+                           active='users')
+
+
+@admin_bp.route('/users/<int:user_id>/lock', methods=['POST'])
+def lock_user_view(user_id):
+    user = dao.get_user_by_id(user_id)
+    if not user:
+        abort(404)
+    try:
+        dao.remember_admin_id(current_user.id)
+        dao.set_user_active(user, False)
+        flash(f'Đã khóa tài khoản {user.username}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('admin.users_view'))
+
+
+@admin_bp.route('/users/<int:user_id>/unlock', methods=['POST'])
+def unlock_user_view(user_id):
+    user = dao.get_user_by_id(user_id)
+    if not user:
+        abort(404)
+    dao.set_user_active(user, True)
+    flash(f'Đã mở khóa tài khoản {user.username}')
+    return redirect(url_for('admin.users_view'))
+
+
+# ---------- CẤU HÌNH HỆ THỐNG ----------
+
+@admin_bp.route('/config')
+def config_view():
+    configs = dao.get_all_configs()
+    return render_template('admin/config.html',
+                           configs=configs,
+                           active='config')
+
+
+@admin_bp.route('/config/update', methods=['POST'])
+def update_config_view():
+    key = request.form.get('key', '')
+    try:
+        dao.update_config(key, request.form.get('value'))
+        flash(f'Đã lưu cấu hình {key}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('admin.config_view'))

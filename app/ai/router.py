@@ -5,6 +5,8 @@ from app.models import Order, Review
 from app.ai import ai_bp
 from app.ai import dao
 from app.ai import gemini
+from app.ai import recommend
+from app.ai import pairing
 
 
 def _load_order(order_id):
@@ -17,6 +19,34 @@ def _load_order(order_id):
     if not order:
         abort(404)
     return order
+
+
+@ai_bp.route('/suggestions')
+@login_required
+def suggestions_view():
+    """Trang "Gợi ý cho bạn": món cá nhân hóa theo lịch sử hành vi +
+    món đi kèm dựa trên giỏ hàng hiện tại (association rules)."""
+    favorite_categories = []
+    recommended = []
+    popular = []
+
+    try:
+        recommended, popular = recommend.recommend_dishes_for_user(current_user.id)
+        favorite_categories = recommend.get_favorite_category_names(current_user.id)
+    except Exception as e:
+        flash(f'Không tạo được gợi ý cá nhân hóa: {e}', 'warning')
+        try:
+            popular = recommend.get_popular_dishes()
+        except Exception:
+            popular = []
+
+    paired_dishes = pairing.get_pairing_suggestions_for_user(current_user.id)
+
+    return render_template('ai/suggestions.html',
+                           recommended=recommended,
+                           popular=popular,
+                           paired_dishes=paired_dishes,
+                           favorite_categories=favorite_categories)
 
 
 @ai_bp.route('/reviews')

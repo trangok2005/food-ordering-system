@@ -110,6 +110,14 @@
           <strong class="text-danger">Chưa đặt — khoảng cách giao hàng không được kiểm tra</strong></div>
         {% endif %}
       </div>
+      <div class="px-3 pb-3">
+        <form method="post" action="{{ url_for('restaurant.recompute_pairings') }}">
+          <button type="submit" class="btn btn-outline-success btn-sm w-100"
+                  title="Tính lại luật kết hợp món đi kèm từ các đơn đã hoàn thành">
+            &#129386; Cập nhật luật kết hợp món ăn (AI)
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </div>

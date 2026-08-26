@@ -1,0 +1,43 @@
+{% extends 'layout/base.html' %}
+{% block title %}Cấu hình hệ thống | Food Ordering System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-3">Cấu hình hệ thống</h2>
+  {% include 'admin/_nav.html' %}
+
+  <div class="alert alert-secondary small">
+    Đây là các ràng buộc nghiệp vụ mặc định toàn hệ thống. Nhà hàng có thể
+    ghi đè riêng giá trị đơn tối thiểu, số lượng tối đa 1 món/đơn và thời gian
+    xác nhận đơn trong trang cài đặt của họ.
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <table class="table align-middle">
+        <thead>
+          <tr><th>Khóa</th><th>Giá trị</th><th style="width: 320px;">Cập nhật</th></tr>
+        </thead>
+        <tbody>
+          {% for cfg in configs %}
+          <tr>
+            <td>
+              <code>{{ cfg.key }}</code>
+              <small class="d-block text-muted">{{ cfg.description }}</small>
+            </td>
+            <td><span class="fw-bold">{{ cfg.value or '(chưa đặt - dùng mã nguồn)' }}</span></td>
+            <td>
+              <form method="post" action="{{ url_for('admin.update_config_view') }}" class="d-flex gap-2">
+                <input type="hidden" name="key" value="{{ cfg.key }}" />
+                <input type="number" name="value" value="{{ cfg.value }}" class="form-control form-control-sm" required />
+                <button type="submit" class="btn btn-sm btn-primary">Lưu</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

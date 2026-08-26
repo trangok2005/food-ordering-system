@@ -1,8 +1,4 @@
-1. Thông tin dự án
-Tên dự án: HỆ THỐNG ĐẶT MÓN ĂN TRỰC TUYẾN
-Mã dự án): Nhom17
-Người yêu cầu dự án: Thầy Nguyễn Trung Hậu
-Người phê duyệt dự án: Thầy Nguyễn Trung Hậu
+
 2. Mục tiêu dự án
 Xây dựng một website đặt món ăn trực tuyến phục vụ mục đích học tập và thực hành môn học.
 Áp dụng các kiến thức về phân tích thiết kế hệ thống, cơ sở dữ liệu và lập trình web.
@@ -28,34 +24,8 @@ Tích hợp các tính năng thông minh: gợi ý món ăn cá nhân hóa bằn
 Các ràng buộc nghiệp vụ (giá trị tối thiểu/tối đa như số lượng món, giá trị đơn hàng…) có giá trị mặc định do hệ thống thiết lập, cho phép quản trị viên/nhà hàng tùy chỉnh.
 Quản trị viên có trang quản lý (dashboard) riêng để giám sát nhà hàng, thực đơn và đơn hàng.
 Lưu trữ dữ liệu bằng Database.
-4. Các bên liên quan chính
-Tên
-Vai trò
-Tổ chức/Phòng ban
-Liên hệ
-Thầy Nguyễn Trung Hậu
-Khách hàng
-Trần Văn Trạng
-Project Manager
-Phạm Tấn Thành
-Full-Stack Developer
-Phạm Tuấn Anh
-Full-Stack  Developer
-5. Kế hoạch sơ bộ
-Mốc thời gian chính:
-- Ngày bắt đầu: 26/6/2026
-- Ngày kết thúc dự kiến: 4/9/2026
-Các mốc quan trọng (Milestones) dự kiến:
-- M0: Hoàn thành Project Charter, WBS và thiết kế hệ thống (Use Case, Class Diagram, ERD) – 10/7/2026
-- M1: Hoàn thành module Đăng ký/Đăng nhập và Tìm kiếm nhà hàng – 24/7/2026
-- M2: Hoàn thành module Thực đơn và Giỏ hàng – 7/8/2026
-- M3: Hoàn thành module Đặt hàng, Thanh toán và Xác nhận đơn (phía nhà hàng) – 21/8/2026
-- M4: Hoàn thành các tính năng thông minh (gợi ý món, dự đoán món kèm, phân tích bình luận) – 28/8/2026
-- M5: Kiểm thử tích hợp, hoàn thiện báo cáo và demo – 4/9/2026
-Ngân sách ước tính: Không phát sinh chi phí đáng kể; sử dụng các dịch vụ/công cụ miễn phí (Gemini API gói miễn phí, MySQL/Python mã nguồn mở, GitHub Student Developer Pack). Demo chạy cục bộ (localhost); nếu cần deploy công khai (để webhook payOS hoạt động), dùng Oracle Cloud Free Tier (miễn phí vĩnh viễn) hoặc Azure for Students (100$ credit, không cần thẻ) — không dùng DigitalOcean vì ưu đãi sinh viên đã ngừng từ 8/2026.
-Tài nguyên dự kiến sử dụng:
-Nhóm 3 sinh viên.
-Máy tính cá nhân.
+
+
 Python
 MySQL hoặc SQL Server.
 GitHub để quản lý mã nguồn.
@@ -80,15 +50,3 @@ Hoàn thành đúng thời gian theo kế hoạch môn học.
 Thực hiện đầy đủ các chức năng đã đề ra.
 Triển khai đầy đủ 3 tính năng thông minh (gợi ý món ăn, dự đoán món ăn đi kèm, phân tích bình luận) ở mức độ đã thống nhất với khách hàng (mô hình học máy nhỏ/luật kết hợp/Gemini API, không bắt buộc deep learning tự huấn luyện).
 Báo cáo, tài liệu và slide đầy đủ.
-8. Phê duyệt
-Người lập
-Vai trò
-Ký tên
-Ngày
-Thầy Nguyễn  Trung Hậu
-Nhà tài trợ dự án
-__________
-___/___/2025
-Trần Văn Trạng
-Quản lý dự án
-26/6/2026

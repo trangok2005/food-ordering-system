@@ -27,9 +27,15 @@ def _app_url(path):
     return request.host_url.rstrip('/') + path
 
 
-def _poll_payment_status(payment_request_id, tries=10, delay=1.0):
+def _poll_payment_status(payment_request_id):
     """Kiểm tra trạng thái PayOS nhiều lần.
     Dùng polling thay cho webhook khi chạy localhost."""
+    if payos.PAYOS_MODE == 'live':
+        tries, delay = 10, 1.0
+    else:
+        # Mock trả kết quả ngay lập tức, không cần chờ lâu
+        tries, delay = 3, 0.2
+
     client = payos.get_client()
     for _ in range(tries):
         try:
@@ -110,6 +116,37 @@ def create_payment():
     session['pending_payment'] = pending
 
     return redirect(link['checkoutUrl'])
+
+
+@cart_bp.route('/mock-payos/<payment_id>')
+def mock_checkout_view(payment_id):
+    """Trang thanh toán PayOS GIẢ LẬP - chỉ tồn tại khi PAYOS_MODE != live.
+    Mô phỏng trang checkout của PayOS để demo luồng thanh toán trên localhost."""
+    payment = payos.MockPayOSClient.payments.get(payment_id)
+    if not payment:
+        abort(404)
+    return render_template('cart/mock_payos.html', payment=payment)
+
+
+@cart_bp.route('/mock-payos/<payment_id>/pay', methods=['POST'])
+def mock_pay(payment_id):
+    """Giả lập khách đã chuyển khoản thành công -> trả về returnUrl."""
+    payment = payos.MockPayOSClient.payments.get(payment_id)
+    if not payment:
+        abort(404)
+    payment['status'] = 'PAID'
+    separator = '&' if '?' in payment['return_url'] else '?'
+    return redirect(f"{payment['return_url']}{separator}id={payment_id}")
+
+
+@cart_bp.route('/mock-payos/<payment_id>/cancel', methods=['POST'])
+def mock_cancel(payment_id):
+    """Giả lập khách hủy thanh toán -> trả về cancelUrl."""
+    payment = payos.MockPayOSClient.payments.get(payment_id)
+    if not payment:
+        abort(404)
+    payment['status'] = 'CANCELLED'
+    return redirect(payment['cancel_url'])
 
 
 @cart_bp.route('/payment-return')

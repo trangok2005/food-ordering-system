@@ -1,0 +1,94 @@
+{% extends 'layout/base.html' %}
+{% block title %}Hồ sơ cá nhân | Food Ordering System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row g-4">
+    <!-- Hồ sơ -->
+    <div class="col-lg-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-header bg-white fw-bold">Hồ sơ cá nhân</div>
+        <div class="card-body">
+          <form method="post" action="{{ url_for('auth.profile_view') }}">
+            <input type="hidden" name="action" value="update_profile" />
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Tên đăng nhập</label>
+                <input type="text" class="form-control" value="{{ current_user.username }}" disabled />
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" value="{{ current_user.email }}" disabled />
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Họ và tên</label>
+              <input type="text" name="full_name" class="form-control" maxlength="100"
+                     value="{{ current_user.full_name or '' }}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Số điện thoại</label>
+              <input type="tel" name="phone" class="form-control" maxlength="11"
+                     placeholder="10-11 ký số" value="{{ current_user.phone or '' }}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Địa chỉ</label>
+              <input type="text" name="address" class="form-control" maxlength="255"
+                     value="{{ current_user.address or '' }}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Ảnh đại diện (link)</label>
+              <input type="url" name="avatar" class="form-control" placeholder="https://..."
+                     value="{{ current_user.avatar or '' }}" />
+            </div>
+            <button type="submit" class="btn btn-primary">Lưu hồ sơ</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Đổi mật khẩu -->
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white fw-bold">Đổi mật khẩu</div>
+        <div class="card-body">
+          {% if not current_user.password %}
+          <div class="alert alert-info small">
+            Tài khoản Google chưa có mật khẩu nội bộ.
+            Dùng chức năng <a href="{{ url_for('auth.forgot_password_view') }}">quên mật khẩu</a>
+            để đặt mật khẩu mới.
+          </div>
+          {% else %}
+          <form method="post" action="{{ url_for('auth.profile_view') }}">
+            <input type="hidden" name="action" value="change_password" />
+            <div class="mb-3">
+              <label class="form-label">Mật khẩu hiện tại</label>
+              <input type="password" name="current_password" class="form-control" required />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Mật khẩu mới</label>
+              <input type="password" name="new_password" class="form-control" required minlength="6" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Nhập lại mật khẩu mới</label>
+              <input type="password" name="confirm_password" class="form-control" required minlength="6" />
+            </div>
+            <button type="submit" class="btn btn-warning">Đổi mật khẩu</button>
+          </form>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
+      <div class="card shadow-sm mt-4">
+        <div class="card-body text-center">
+          <p class="mb-2">Bạn có nhà hàng muốn bán món trên TvT-food?</p>
+          <a href="{{ url_for('restaurant.register_restaurant_view') }}"
+             class="btn btn-outline-success w-100">Đăng ký bán hàng</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -160,6 +160,27 @@ def seed_database():
                                     unit_price=comtam2.price))
         db.session.commit()
 
+        # Don thu 3 da hoan thanh voi 2 mon - de luat ket hop (AI pairing)
+        # co du lieu tinh ngay khi demo
+        order3 = Order(delivery_address='Quan 5, TP.HCM', phone='0977777777',
+                       total_amount=comtam1.price + trada.price,
+                       status=OrderStatus.COMPLETED,
+                       payment_method=PaymentMethod.ONLINE, payment_status=PaymentStatus.PAID,
+                       paid_at=datetime.now() - timedelta(days=2),
+                       confirmed_at=datetime.now() - timedelta(days=2),
+                       user_id=cus2.id, restaurant_id=r2.id)
+        db.session.add(order3)
+        db.session.commit()
+        order3.set_confirm_deadline()
+        db.session.commit()
+        db.session.add_all([
+            OrderDetail(order_id=order3.id, dish_id=comtam1.id, quantity=2,
+                        unit_price=comtam1.price),
+            OrderDetail(order_id=order3.id, dish_id=trada.id, quantity=2,
+                        unit_price=trada.price),
+        ])
+        db.session.commit()
+
         # ---------- Danh gia + phan tich cam xuc (AI) ----------
         db.session.add(Review(rating=5, comment='Ca hoi rat tuoi, se ung ho tiep!',
                               sentiment_label=SentimentLabel.POSITIVE, sentiment_score=0.92,

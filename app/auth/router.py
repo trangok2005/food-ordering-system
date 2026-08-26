@@ -3,11 +3,12 @@ import secrets
 from urllib.parse import urlencode
 
 import requests
-from flask import request, render_template, redirect, url_for, flash, jsonify, session
+from flask import request, render_template, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, current_user, login_required
 from app import db
 from app.auth import auth_bp
 from app.auth import dao
+from app.auth.rate_limit import login_rate_limiter
 
 GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -46,9 +47,16 @@ def login_process():
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
 
+    # Chặn dò mật khẩu: tối đa 10 lần thử / 5 phút cho mỗi cặp (IP, username)
+    if login_rate_limiter.is_blocked(request.remote_addr, username):
+        return render_template(
+            'auth/login.html',
+            err_msg='Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi 5 phút rồi thử lại.')
+
     user = dao.auth_user(username, password)
 
     if not user:
+        login_rate_limiter.record_failure(request.remote_addr, username)
         return render_template('auth/login.html', err_msg='Sai tên đăng nhập hoặc mật khẩu')
 
     if user.is_locked():
@@ -57,6 +65,7 @@ def login_process():
     login_user(user)
     user.reset_failed_login()
     db.session.commit()
+    login_rate_limiter.reset(request.remote_addr, username)
 
     if user.role.name == 'RESTAURANT':
         return redirect(url_for('restaurant.dashboard'))
@@ -188,3 +197,64 @@ def google_callback():
 def logout_process():
     logout_user()
     return redirect(url_for('auth.login_view'))
+
+
+# ---------- HỒ SƠ & MẬT KHẨU ----------
+
+@auth_bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile_view():
+    """Xem và cập nhật hồ sơ cá nhân + đổi mật khẩu."""
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        try:
+            if action == 'change_password':
+                dao.change_password(current_user,
+                                    request.form.get('current_password'),
+                                    request.form.get('new_password'),
+                                    request.form.get('confirm_password'))
+                flash('Đã đổi mật khẩu thành công')
+            else:
+                dao.update_profile(current_user, request.form)
+                flash('Đã cập nhật hồ sơ')
+        except ValueError as e:
+            flash(str(e), 'error')
+
+        return redirect(url_for('auth.profile_view'))
+
+    return render_template('auth/profile.html')
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password_view():
+    """Yêu cầu đặt lại mật khẩu: nhập username hoặc email.
+    Hệ thống sinh token một lần (hết hạn 30 phút). Vì demo chạy local
+    không có SMTP, link đặt lại được hiển thị trực tiếp trên màn hình."""
+    reset_url = None
+
+    if request.method == 'POST':
+        user, token = dao.create_reset_token(request.form.get('identifier'))
+        if user and token:
+            reset_url = url_for('auth.reset_password_view',
+                                token=token, _external=True)
+
+    return render_template('auth/forgot_password.html', reset_url=reset_url)
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password_view():
+    token = request.args.get('token') or request.form.get('token', '')
+
+    if request.method == 'POST':
+        try:
+            dao.reset_password(token,
+                               request.form.get('new_password'),
+                               request.form.get('confirm_password'))
+            flash('Đặt lại mật khẩu thành công. Vui lòng đăng nhập.')
+            return redirect(url_for('auth.login_view'))
+        except ValueError as e:
+            return render_template('auth/reset_password.html',
+                                   err_msg=str(e), token=token)
+
+    return render_template('auth/reset_password.html', token=token)

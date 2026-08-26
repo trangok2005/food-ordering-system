@@ -1,0 +1,99 @@
+{% extends 'layout/base.html' %}
+{% block title %}Gợi ý cho bạn | Food Ordering System{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-1">&#10024; Gợi ý cho bạn, {{ current_user.username }}</h2>
+
+  {% if favorite_categories %}
+  <p class="text-muted">
+    Dựa trên khẩu vị của bạn:
+    {% for name in favorite_categories %}
+    <span class="badge bg-info text-dark">{{ name }}</span>
+    {% endfor %}
+  </p>
+  {% else %}
+  <p class="text-muted">Bạn chưa có lịch sử đặt món - đây là các món đang được yêu thích nhất.</p>
+  {% endif %}
+
+  <!-- Món cá nhân hóa -->
+  <section class="mb-5">
+    <h4>&#127869; Món phù hợp với bạn</h4>
+    {% if recommended %}
+    <div class="row g-3">
+      {% for dish, score in recommended %}
+      <div class="col-md-6 col-lg-3">
+        <div class="dish-card h-100">
+          <div class="dish-card-body">
+            <h5 class="dish-card-name">{{ dish.name }}</h5>
+            <p class="dish-card-desc small text-muted">{{ dish.restaurant.name }}</p>
+            <div class="dish-card-footer">
+              <span class="dish-price">{{ dish.price|vnd }}</span>
+              <form method="post" action="{{ url_for('cart.add_to_cart') }}">
+                <input type="hidden" name="dish_id" value="{{ dish.id }}" />
+                <button class="btn btn-primary btn-sm">Thêm vào giỏ</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>Chưa có gợi ý nào cho lúc này.</p></div>
+    {% endif %}
+  </section>
+
+  <!-- Món đi kèm theo luật kết hợp -->
+  {% if paired_dishes %}
+  <section class="mb-5">
+    <h4>&#129386; Món thường được đặt kèm giỏ hàng của bạn</h4>
+    <div class="row g-3">
+      {% for dish in paired_dishes %}
+      <div class="col-md-6 col-lg-3">
+        <div class="dish-card h-100">
+          <div class="dish-card-body">
+            <h5 class="dish-card-name">{{ dish.name }}</h5>
+            <p class="dish-card-desc small text-muted">{{ dish.restaurant.name }}</p>
+            <div class="dish-card-footer">
+              <span class="dish-price">{{ dish.price|vnd }}</span>
+              <form method="post" action="{{ url_for('cart.add_to_cart') }}">
+                <input type="hidden" name="dish_id" value="{{ dish.id }}" />
+                <button class="btn btn-outline-primary btn-sm">Thêm vào giỏ</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <!-- Món phổ biến -->
+  <section class="mb-4">
+    <h4>&#128293; Món nổi bật toàn hệ thống</h4>
+    {% if popular %}
+    <div class="row g-3">
+      {% for dish in popular %}
+      <div class="col-md-6 col-lg-3">
+        <div class="dish-card h-100">
+          <div class="dish-card-body">
+            <h5 class="dish-card-name">{{ dish.name }}</h5>
+            <p class="dish-card-desc small text-muted">{{ dish.restaurant.name }}</p>
+            <div class="dish-card-footer">
+              <span class="dish-price">{{ dish.price|vnd }}</span>
+              <a class="btn btn-outline-secondary btn-sm"
+                 href="{{ url_for('browse.restaurant_menu_view', restaurant_id=dish.restaurant_id) }}">Xem nhà hàng</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p>Chưa có dữ liệu đơn hàng để xếp hạng món.</p></div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

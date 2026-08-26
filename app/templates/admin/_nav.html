@@ -11,4 +11,12 @@
     <a class="nav-link {{ 'active' if active == 'restaurants' }}"
        href="{{ url_for('admin.restaurants_view') }}">Duyệt nhà hàng</a>
   </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'users' }}"
+       href="{{ url_for('admin.users_view') }}">Người dùng</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'config' }}"
+       href="{{ url_for('admin.config_view') }}">Cấu hình</a>
+  </li>
 </ul>

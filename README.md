@@ -87,11 +87,61 @@ Confirmed→Preparing→Delivering→Completed, hoặc Cancelled/Expired; có `c
 
 ## 5. Setup & chạy thử
 
-```bash
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env   # điền DATABASE_*, SECRET_KEY, GOOGLE_CLIENT_*, PAYOS_*
-python run.py
+Copy-Item .env.example .env   # điền DATABASE_*, PAYOS_*, GOOGLE_CLIENT_*, GEMINI_API_KEY
+python seed.py                # tạo bảng + dữ liệu mẫu (xóa sạch dữ liệu cũ)
+python run.py                 # http://127.0.0.1:5000
 ```
 
-Chạy test: `pytest` (dùng SQLite in-memory, không đụng DB thật).
+> MySQL phải có sẵn schema `tvtfooddb` (`CREATE DATABASE tvtfooddb CHARACTER SET utf8mb4;`)
+> vì SQLAlchemy chỉ tự tạo bảng, không tự tạo database.
+
+Chạy test: `pytest app\test -q` (dùng SQLite in-memory, không đụng DB thật).
+
+## 5a. Tài liệu chi tiết
+
+| Tài liệu | Nội dung |
+|---|---|
+| [`docs/USE_CASES.md`](docs/USE_CASES.md) | Đặc tả Use Case (lớp nghiệp vụ) — tách bạch với SDS, UC-01 chi tiết theo luồng thật |
+| [`docs/USE_CASES_DETAIL.md`](docs/USE_CASES_DETAIL.md) | UC Xử lý đơn, Tìm kiếm, Quản lý giỏ hàng — đặc tả theo mẫu SRS, đã đối chiếu luồng code |
+| [`docs/INSTALL.md`](docs/INSTALL.md) | Cài đặt môi trường từng bước + xử lý sự cố thường gặp |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | Kịch bản demo chạy theo trình tự cho từng vai trò |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | Triển khai Render / PythonAnywhere (không Docker) |
+| [`.env.example`](.env.example) | Danh sách biến môi trường cần cấu hình |
+
+## 6. Tài khoản demo (sau khi chạy `seed.py`)
+
+| Vai trò | Username | Mật khẩu |
+|---|---|---|
+| Admin | `admin` | `123456` |
+| Chủ nhà hàng (Sushi House) | `sushihouse_owner` | `123456` |
+| Chủ nhà hàng (Com Tam Sai Gon) | `comtam_owner` | `123456` |
+| Khách hàng | `nguyenvana` / `lethib` | `123456` |
+
+## 7. Thanh toán payOS - chế độ MOCK cho demo
+
+`.env` có biến `PAYOS_MODE`:
+
+- `PAYOS_MODE=mock` (**mặc định**, dùng khi demo local): hệ thống KHÔNG gọi API payOS thật.
+  Khi checkout, khách được đưa tới trang giả lập `/cart/mock-payos/<id>` trong app,
+  bấm "Giả lập thanh toán thành công" → đơn được tạo như đã trả tiền thật.
+- `PAYOS_MODE=live`: gọi API payOS thật (chỉ bật khi deploy public hoặc test tiền nhỏ).
+## 8. Chức năng chính (đã hoàn thành)
+
+- **Auth**: đăng ký/đăng nhập nội bộ + Google OAuth, quên mật khẩu (token 30 phút),
+  đổi mật khẩu, hồ sơ cá nhân, khóa tài khoản sau 5 lần sai, rate-limit dò mật khẩu theo IP.
+- **Customer**: tìm kiếm 1 ô từ khóa (nhà hàng + món), menu nhà hàng, giỏ hàng 1-nhà-hàng,
+  checkout (kiểm tra mở cửa/giá trị tối thiểu/hết hàng/bán kính giao Haversine),
+  thanh toán payOS (mock/live), theo dõi đơn, đánh giá kèm phân tích cảm xúc Gemini.
+- **Restaurant**: đăng ký nhà hàng (chờ duyệt), CRUD danh mục & món ăn, ẩn/bật món hết hàng
+  (soft delete), quản lý đơn (xác nhận → chuẩn bị → giao → hoàn tất; hủy có lý do;
+  quá hạn tự EXPIRED), dashboard doanh thu, nút "cập nhật luật kết hợp" (AI).
+- **Admin**: dashboard thống kê, duyệt/khóa/mở khóa nhà hàng, quản lý user (lọc/tìm/khóa),
+  cấu hình hệ thống (timeout xác nhận, giá trị đơn tối thiểu, số lượng tối đa, page size).
+- **AI**: gợi ý món cá nhân hóa (`/ai/suggestions`, chấm điểm lịch sử hành vi + giờ +
+  khẩu vị), dự đoán món đi kèm (association rules Apriori mức 2, bảng `DishPairing`),
+  phân tích cảm xúc bình luận (Gemini API, graceful fallback khi lỗi).
 

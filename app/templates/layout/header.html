@@ -38,9 +38,16 @@
         {% if current_user.is_authenticated %}
         <span class="text-white fw-bold">Chào, {{ current_user.username }}</span>
 
+        <a href="{{ url_for('auth.profile_view') }}" class="btn btn-outline-light btn-sm"
+          >Hồ sơ</a
+        >
+
         {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
         <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
           >Hóa đơn của tôi</a
+        >
+        <a href="{{ url_for('ai.suggestions_view') }}" class="btn btn-outline-info btn-sm"
+          >Gợi ý cho bạn</a
         >
         <a href="{{ url_for('ai.my_reviews') }}" class="btn btn-outline-info btn-sm"
           >Đánh giá của tôi</a

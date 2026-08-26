@@ -1,11 +1,16 @@
 import hashlib
 import hmac
 import os
+import secrets
 
 import requests
 
 
 PAYOS_BASE_URL = os.getenv('PAYOS_BASE_URL', 'https://api-merchant.payos.vn')
+
+# PAYOS_MODE=live  -> gọi API payOS thật
+# PAYOS_MODE=mock  -> dùng cổng giả lập trong app (demo local, không tốn tiền)
+PAYOS_MODE = os.getenv('PAYOS_MODE', 'live').strip().lower()
 
 
 def _sign_payment_request(amount, cancel_url, description, order_code, return_url, checksum_key):
@@ -28,9 +33,9 @@ def _sign_payment_request(amount, cancel_url, description, order_code, return_ur
 
 
 class PayOSClient:
-    """Wrapper đơn giản để gọi PayOS Merchant API.
+    """Wrapper để gọi PayOS Merchant API thật.
 
-    Hiện tại dùng cho:
+    Dùng cho:
     - Tạo payment link
     - Kiểm tra trạng thái thanh toán
     """
@@ -97,9 +102,58 @@ class PayOSClient:
         return self._request_json('GET', f'/v2/payment-requests/{payment_request_id}')
 
 
+class MockPayOSClient:
+    """Cổng thanh toán PayOS GIẢ LẬP dùng khi demo trên localhost.
+
+    Mô phỏng đúng 2 phương thức mà hệ thống dùng của PayOSClient:
+    - create_payment_link: trả về checkoutUrl trỏ tới trang giả lập
+      trong app (người demo bấm "Thanh toán thành công" / "Hủy").
+    - get_payment_request: đọc trạng thái từ bộ nhớ (PAID/CANCELLED/PENDING).
+
+    Không gọi ra Internet nên không phát sinh giao dịch thật.
+    """
+
+    # Trạng thái các phiên thanh toán giả lập, sống cùng tiến trình app
+    # (đủ cho demo; app restart thì phiên cũ không còn ý nghĩa nữa).
+    payments = {}
+
+    def create_payment_link(self, amount, description, reference, return_url, cancel_url):
+        from flask import url_for
+
+        payment_id = str(reference)
+
+        MockPayOSClient.payments[payment_id] = {
+            'id': payment_id,
+            'amount': int(amount),
+            'description': (description or '')[:255],
+            'status': 'PENDING',
+            'return_url': return_url,
+            'cancel_url': cancel_url,
+        }
+
+        return {
+            'id': payment_id,
+            'orderCode': int(reference),
+            'amount': int(amount),
+            'description': description,
+            'checkoutUrl': url_for('cart.mock_checkout_view',
+                                   payment_id=payment_id,
+                                   _external=True),
+        }
+
+    def get_payment_request(self, payment_request_id):
+        payment = MockPayOSClient.payments.get(str(payment_request_id))
+        if not payment:
+            raise ValueError('Không tìm thấy phiên thanh toán giả lập')
+        return dict(payment)
+
+
 def get_client():
-    return PayOSClient(
-        client_id=os.environ['PAYOS_CLIENT_ID'],
-        api_key=os.environ['PAYOS_API_KEY'],
-        checksum_key=os.environ['PAYOS_CHECKSUM_KEY'],
-    )
+    """Factory chọn client payOS theo cấu hình PAYOS_MODE trong .env."""
+    if PAYOS_MODE == 'live':
+        return PayOSClient(
+            client_id=os.environ['PAYOS_CLIENT_ID'],
+            api_key=os.environ['PAYOS_API_KEY'],
+            checksum_key=os.environ['PAYOS_CHECKSUM_KEY'],
+        )
+    return MockPayOSClient()

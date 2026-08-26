@@ -34,6 +34,10 @@
         <p class="restaurant-desc">{{ restaurant.description }}</p>
         <p class="restaurant-address">&#128205; {{ restaurant.address }}</p>
 
+        {% if not restaurant.is_open %}
+        <span class="badge bg-secondary mb-2">Đóng cửa - không nhận đơn</span>
+        {% endif %}
+
         {% if matched %}
         <div class="restaurant-dishes">
           {% for dish in matched %}
@@ -44,7 +48,7 @@
           {% endfor %}
         </div>
         {% else %}
-        <p class="text-muted small mb-1">Không có món khớp từ khóa.</p>
+        <p class="text-muted small mb-1">Không có món nào khớp từ khóa.</p>
         {% endif %}
 
         <div class="restaurant-actions">
@@ -83,6 +87,6 @@
 {% endif %}
 
 {% else %}
-<div class="empty-state"><p>Không tìm thấy kết quả cho "{{ keyword }}".</p></div>
+<div class="empty-state"><p>Không tìm thấy kết quả nào cho "{{ keyword }}".</p></div>
 {% endif %}
 {% endblock %}

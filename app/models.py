@@ -48,6 +48,10 @@ class User(BaseModel, UserMixin):
     failed_login_count = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
 
+    # quên mật khẩu: token một lần, hết hạn sau 30 phút
+    reset_token = Column(String(100), nullable=True, index=True)
+    reset_token_expires = Column(DateTime, nullable=True)
+
     oauth_accounts = relationship('OAuthAccount', backref='user', lazy=True, cascade='all, delete-orphan')
     restaurant = relationship('Restaurant', backref='owner', uselist=False, lazy=True)
     carts = relationship('Cart', backref='user', lazy=True, cascade='all, delete-orphan')
