@@ -238,13 +238,16 @@ def confirm_order(order):
     if order.is_expired():
         order.status = OrderStatus.EXPIRED
         db.session.commit()
-        raise ValueError('Đơn đã quá hạn xác nhận, không thể xác nhận')
+        raise ValueError('Đơn đã quá hạn xác nhận')
+
     if order.status != OrderStatus.PENDING:
-        raise ValueError('Chỉ xác nhận được đơn đang chờ xác nhận')
+        raise ValueError('Đơn này không thể xác nhận')
 
     order.status = OrderStatus.CONFIRMED
     order.confirmed_at = datetime.now()
+
     db.session.commit()
+
     return order
 
 def advance_order(order):
