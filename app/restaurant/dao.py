@@ -255,18 +255,28 @@ def advance_order(order):
     db.session.commit()
     return order
 
+
 def cancel_order(order, reason):
     reason = (reason or '').strip()
+
     if not reason:
         raise ValueError('Vui lòng nhập lý do hủy đơn')
-    if order.status in (OrderStatus.COMPLETED,
-                        OrderStatus.CANCELLED,
-                        OrderStatus.EXPIRED):
-        raise ValueError('Đơn này không thể hủy')
+
+    if order.status == OrderStatus.COMPLETED:
+        raise ValueError('Đơn đã hoàn thành không thể hủy')
+
+    if order.status == OrderStatus.CANCELLED:
+        raise ValueError('Đơn này đã được hủy')
+
+    if order.status == OrderStatus.EXPIRED:
+        raise ValueError('Đơn đã quá hạn không thể hủy')
 
     order.cancel_by_restaurant(reason)
+
     db.session.commit()
+
     return order
+d
 
 def get_dashboard_stats(restaurant_id):
     counts = get_order_status_counts(restaurant_id)
