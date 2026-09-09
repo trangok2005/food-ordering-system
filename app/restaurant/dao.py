@@ -279,7 +279,7 @@ def cancel_order(order, reason):
     db.session.commit()
 
     return order
-d
+
 
 def get_dashboard_stats(restaurant_id):
     counts = get_order_status_counts(restaurant_id)
