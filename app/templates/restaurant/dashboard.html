@@ -1,124 +1,779 @@
 {% extends 'layout/base.html' %}
+
 {% block title %}Tổng Quan | {{ restaurant.name }}{% endblock %}
 
 {% block content %}
-{% set badge = {
-  'PENDING': ('warning text-dark', 'Chờ xác nhận'),
-  'CONFIRMED': ('info', 'Đã xác nhận'),
-  'PREPARING': ('info', 'Đang chuẩn bị'),
-  'DELIVERING': ('primary', 'Đang giao'),
-  'COMPLETED': ('success', 'Hoàn thành'),
-  'CANCELLED': ('secondary', 'Đã hủy'),
-  'EXPIRED': ('dark', 'Quá hạn'),
-} %}
 
-<section class="restaurant-hero">
-  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
-  <p class="restaurant-hero-desc">{{ restaurant.description or 'Trang quản lý nhà hàng' }}</p>
-  <p class="restaurant-address">
-    <span class="badge bg-{{ 'success' if restaurant.is_open else 'secondary' }}">
-      {{ 'Đang mở cửa' if restaurant.is_open else 'Đang đóng cửa' }}
-    </span>
-    &middot; &#128205; {{ restaurant.address }} &middot; &#128222; {{ restaurant.phone or 'Chưa có SĐT' }}
-  </p>
-</section>
+<style>
+    .restaurant-dashboard {
+        padding: 10px 0 40px;
+    }
 
-{% include 'restaurant/_nav.html' %}
+    /* HERO */
+    .restaurant-hero-new {
+        background: linear-gradient(135deg, #0d6efd, #0a58ca);
+        border-radius: 20px;
+        padding: 30px;
+        color: white;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 30px rgba(13, 110, 253, 0.18);
+    }
 
-<div class="row g-4 mb-4">
-  <div class="col-md-3 col-6">
-    <div class="feature-card text-center">
-      <div class="feature-icon">&#9201;</div>
-      <h3>{{ stats.counts.get('PENDING', 0) }}</h3>
-      <p class="text-muted mb-0">Chờ xác nhận</p>
+    .restaurant-hero-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .restaurant-hero-name {
+        margin: 0 0 8px;
+        font-size: 30px;
+        font-weight: 700;
+    }
+
+    .restaurant-hero-desc {
+        margin: 0 0 15px;
+        opacity: .9;
+    }
+
+    .restaurant-info {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        font-size: 14px;
+    }
+
+    .restaurant-info-item {
+        background: rgba(255,255,255,.13);
+        border: 1px solid rgba(255,255,255,.2);
+        padding: 7px 12px;
+        border-radius: 20px;
+    }
+
+    /* STAT */
+    .stat-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 18px;
+        padding: 22px;
+        height: 100%;
+        box-shadow: 0 5px 20px rgba(0,0,0,.05);
+        transition: .25s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 30px rgba(0,0,0,.09);
+    }
+
+    .stat-icon {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 25px;
+        margin-bottom: 15px;
+    }
+
+    .icon-orange {
+        background: #fff3df;
+    }
+
+    .icon-blue {
+        background: #e7f1ff;
+    }
+
+    .icon-purple {
+        background: #f1eaff;
+    }
+
+    .icon-green {
+        background: #e8f8ef;
+    }
+
+    .stat-title {
+        color: #6c757d;
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+
+    .stat-number {
+        color: #212529;
+        font-size: 26px;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    /* CARD */
+    .dashboard-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 18px;
+        overflow: hidden;
+        height: 100%;
+        box-shadow: 0 5px 20px rgba(0,0,0,.05);
+    }
+
+    .dashboard-card-header {
+        padding: 20px 22px;
+        border-bottom: 1px solid #edf0f2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .dashboard-card-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: #212529;
+    }
+
+    .dashboard-card-header small {
+        display: block;
+        margin-top: 4px;
+        color: #6c757d;
+    }
+
+    .btn-dashboard {
+        border-radius: 9px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    /* TABLE */
+    .dashboard-table {
+        margin: 0;
+    }
+
+    .dashboard-table tbody tr {
+        transition: .2s;
+    }
+
+    .dashboard-table tbody tr:hover {
+        background: #f8faff;
+    }
+
+    .order-id {
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .order-date {
+        display: block;
+        font-size: 12px;
+        color: #6c757d;
+        margin-top: 3px;
+    }
+
+    .customer-name {
+        font-size: 14px;
+        color: #495057;
+    }
+
+    .order-total {
+        font-weight: 700;
+        color: #212529;
+    }
+
+    /* STATUS */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 6px 11px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .status-confirmed {
+        background: #cff4fc;
+        color: #055160;
+    }
+
+    .status-preparing {
+        background: #cff4fc;
+        color: #055160;
+    }
+
+    .status-delivering {
+        background: #cfe2ff;
+        color: #084298;
+    }
+
+    .status-completed {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .status-cancelled {
+        background: #e2e3e5;
+        color: #41464b;
+    }
+
+    .status-expired {
+        background: #212529;
+        color: #fff;
+    }
+
+    /* CONFIG */
+    .config-list {
+        padding: 10px 22px 15px;
+    }
+
+    .config-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 13px 0;
+        border-bottom: 1px solid #edf0f2;
+        font-size: 14px;
+    }
+
+    .config-item:last-child {
+        border-bottom: none;
+    }
+
+    .config-label {
+        color: #6c757d;
+    }
+
+    .config-value {
+        text-align: right;
+        font-weight: 600;
+        color: #212529;
+    }
+
+    .gps-warning {
+        color: #dc3545;
+    }
+
+    .ai-section {
+        padding: 0 22px 22px;
+    }
+
+    .ai-button {
+        border-radius: 10px;
+        font-weight: 600;
+        padding: 10px;
+    }
+
+    /* EMPTY */
+    .empty-dashboard {
+        padding: 45px 20px;
+        text-align: center;
+        color: #6c757d;
+    }
+
+    .empty-icon {
+        font-size: 40px;
+        margin-bottom: 10px;
+        opacity: .6;
+    }
+
+    @media (max-width: 768px) {
+
+        .restaurant-hero-new {
+            padding: 22px;
+        }
+
+        .restaurant-hero-top {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .restaurant-hero-name {
+            font-size: 24px;
+        }
+
+        .dashboard-card-header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .config-item {
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .config-value {
+            text-align: left;
+        }
+    }
+</style>
+
+
+<div class="restaurant-dashboard">
+
+    <!-- =========================
+         RESTAURANT HERO
+    ========================== -->
+
+    <section class="restaurant-hero-new">
+
+        <div class="restaurant-hero-top">
+
+            <div>
+
+                <h2 class="restaurant-hero-name">
+                    {{ restaurant.name }}
+                </h2>
+
+                <p class="restaurant-hero-desc">
+                    {{ restaurant.description or 'Trang quản lý nhà hàng' }}
+                </p>
+
+                <div class="restaurant-info">
+
+                    <span class="restaurant-info-item">
+
+                        {% if restaurant.is_open %}
+                            🟢 Đang mở cửa
+                        {% else %}
+                            ⚪ Đang đóng cửa
+                        {% endif %}
+
+                    </span>
+
+                    <span class="restaurant-info-item">
+                        📍 {{ restaurant.address }}
+                    </span>
+
+                    <span class="restaurant-info-item">
+                        📞 {{ restaurant.phone or 'Chưa có SĐT' }}
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         NAVIGATION
+    ========================== -->
+
+    {% include 'restaurant/_nav.html' %}
+
+
+    <!-- =========================
+         STATISTICS
+    ========================== -->
+
+    <div class="row g-4 mb-4">
+
+        <!-- PENDING -->
+        <div class="col-xl-3 col-md-6 col-6">
+
+            <div class="stat-card">
+
+                <div class="stat-icon icon-orange">
+                    ⏳
+                </div>
+
+                <div class="stat-title">
+                    Chờ xác nhận
+                </div>
+
+                <p class="stat-number">
+                    {{ stats.counts.get('PENDING', 0) }}
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- PREPARING -->
+        <div class="col-xl-3 col-md-6 col-6">
+
+            <div class="stat-card">
+
+                <div class="stat-icon icon-blue">
+                    🍜
+                </div>
+
+                <div class="stat-title">
+                    Đang chuẩn bị
+                </div>
+
+                <p class="stat-number">
+                    {{ stats.counts.get('PREPARING', 0)
+                       + stats.counts.get('CONFIRMED', 0) }}
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- DELIVERING -->
+        <div class="col-xl-3 col-md-6 col-6">
+
+            <div class="stat-card">
+
+                <div class="stat-icon icon-purple">
+                    🚚
+                </div>
+
+                <div class="stat-title">
+                    Đang giao
+                </div>
+
+                <p class="stat-number">
+                    {{ stats.counts.get('DELIVERING', 0) }}
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <!-- REVENUE -->
+        <div class="col-xl-3 col-md-6 col-6">
+
+            <div class="stat-card">
+
+                <div class="stat-icon icon-green">
+                    💰
+                </div>
+
+                <div class="stat-title">
+                    Doanh thu đã giao
+                </div>
+
+                <p class="stat-number">
+                    {{ stats.revenue|vnd }}
+                </p>
+
+            </div>
+
+        </div>
+
     </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="feature-card text-center">
-      <div class="feature-icon">&#127836;</div>
-      <h3>{{ stats.counts.get('PREPARING', 0) + stats.counts.get('CONFIRMED', 0) }}</h3>
-      <p class="text-muted mb-0">Đang chuẩn bị</p>
+
+
+    <!-- =========================
+         MAIN CONTENT
+    ========================== -->
+
+    <div class="row g-4">
+
+
+        <!-- =========================
+             RECENT ORDERS
+        ========================== -->
+
+        <div class="col-lg-7">
+
+            <div class="dashboard-card">
+
+                <div class="dashboard-card-header">
+
+                    <div>
+
+                        <h3>
+                            🧾 Đơn hàng gần đây
+                        </h3>
+
+                        <small>
+                            Theo dõi các đơn hàng mới nhất
+                        </small>
+
+                    </div>
+
+                    <a
+                        href="{{ url_for('restaurant.orders_view') }}"
+                        class="btn btn-outline-primary btn-sm btn-dashboard"
+                    >
+                        Xem tất cả
+                    </a>
+
+                </div>
+
+
+                {% if orders %}
+
+                <div class="table-responsive">
+
+                    <table class="table align-middle dashboard-table">
+
+                        <tbody>
+
+                        {% for order in orders %}
+
+                            {% set badge_data = {
+                                'PENDING': ('status-pending', '⏳ Chờ xác nhận'),
+                                'CONFIRMED': ('status-confirmed', '✓ Đã xác nhận'),
+                                'PREPARING': ('status-preparing', '🍳 Đang chuẩn bị'),
+                                'DELIVERING': ('status-delivering', '🚚 Đang giao'),
+                                'COMPLETED': ('status-completed', '✓ Hoàn thành'),
+                                'CANCELLED': ('status-cancelled', '✕ Đã hủy'),
+                                'EXPIRED': ('status-expired', '⚠ Quá hạn')
+                            } %}
+
+                            {% set status_class, status_label =
+                                badge_data.get(
+                                    order.status.name,
+                                    ('status-cancelled', order.status.name)
+                                )
+                            %}
+
+                            <tr>
+
+                                <!-- ORDER -->
+                                <td class="ps-4">
+
+                                    <div class="order-id">
+                                        Đơn #{{ order.id }}
+                                    </div>
+
+                                    <span class="order-date">
+                                        {{ order.created_date.strftime('%H:%M %d/%m/%Y') }}
+                                    </span>
+
+                                </td>
+
+
+                                <!-- CUSTOMER -->
+                                <td>
+
+                                    <span class="customer-name">
+                                        👤
+                                        {{ order.user.full_name
+                                           or order.user.username }}
+                                    </span>
+
+                                </td>
+
+
+                                <!-- TOTAL -->
+                                <td class="text-end">
+
+                                    <span class="order-total">
+                                        {{ order.total_amount|vnd }}
+                                    </span>
+
+                                </td>
+
+
+                                <!-- STATUS -->
+                                <td class="text-end pe-4">
+
+                                    <span class="status-badge {{ status_class }}">
+                                        {{ status_label }}
+                                    </span>
+
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                {% else %}
+
+                <div class="empty-dashboard">
+
+                    <div class="empty-icon">
+                        🧾
+                    </div>
+
+                    <p class="mb-0">
+                        Chưa có đơn hàng nào.
+                    </p>
+
+                </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+        <!-- =========================
+             CONFIGURATION
+        ========================== -->
+
+        <div class="col-lg-5">
+
+            <div class="dashboard-card">
+
+                <div class="dashboard-card-header">
+
+                    <div>
+
+                        <h3>
+                            ⚙️ Cấu hình hiện tại
+                        </h3>
+
+                        <small>
+                            Thiết lập hoạt động của nhà hàng
+                        </small>
+
+                    </div>
+
+                    <a
+                        href="{{ url_for('restaurant.settings_view') }}"
+                        class="btn btn-outline-primary btn-sm btn-dashboard"
+                    >
+                        Chỉnh sửa
+                    </a>
+
+                </div>
+
+
+                <div class="config-list">
+
+                    <!-- MIN ORDER -->
+                    <div class="config-item">
+
+                        <span class="config-label">
+                            Giá trị đơn tối thiểu
+                        </span>
+
+                        <span class="config-value">
+
+                            {{
+                                (restaurant.min_order_amount|string + 'đ')
+                                if restaurant.min_order_amount
+                                else 'Mặc định hệ thống'
+                            }}
+
+                        </span>
+
+                    </div>
+
+
+                    <!-- CONFIRM TIME -->
+                    <div class="config-item">
+
+                        <span class="config-label">
+                            Thời gian xác nhận
+                        </span>
+
+                        <span class="config-value">
+                            {{ restaurant.confirm_timeout_minutes }} phút
+                        </span>
+
+                    </div>
+
+
+                    <!-- DELIVERY RADIUS -->
+                    <div class="config-item">
+
+                        <span class="config-label">
+                            Bán kính giao hàng
+                        </span>
+
+                        <span class="config-value">
+
+                            {{
+                                (restaurant.delivery_radius_km|string + ' km')
+                                if restaurant.delivery_radius_km
+                                else 'Mặc định 10 km'
+                            }}
+
+                        </span>
+
+                    </div>
+
+
+                    <!-- MAX QUANTITY -->
+                    <div class="config-item">
+
+                        <span class="config-label">
+                            Tối đa 1 món / đơn
+                        </span>
+
+                        <span class="config-value">
+
+                            {{
+                                restaurant.max_quantity_per_item
+                                or 'Mặc định hệ thống (20)'
+                            }}
+
+                        </span>
+
+                    </div>
+
+
+                    <!-- GPS -->
+                    <div class="config-item">
+
+                        <span class="config-label">
+                            📍 Tọa độ GPS
+                        </span>
+
+                        {% if restaurant.latitude is not none
+                              and restaurant.longitude is not none %}
+
+                            <span class="config-value">
+
+                                {{ '%.6f'|format(restaurant.latitude) }},
+                                {{ '%.6f'|format(restaurant.longitude) }}
+
+                            </span>
+
+                        {% else %}
+
+                            <span class="config-value gps-warning">
+                                Chưa đặt
+                            </span>
+
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+
+                <!-- AI -->
+                <div class="ai-section">
+
+                    <form
+                        method="post"
+                        action="{{ url_for('restaurant.recompute_pairings') }}"
+                    >
+
+                        <button
+                            type="submit"
+                            class="btn btn-outline-success w-100 ai-button"
+                            title="Tính lại luật kết hợp món đi kèm từ các đơn đã hoàn thành"
+                        >
+                            🤖 Cập nhật luật kết hợp món ăn (AI)
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </div>
+
+        </div>
+
     </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="feature-card text-center">
-      <div class="feature-icon">&#128666;</div>
-      <h3>{{ stats.counts.get('DELIVERING', 0) }}</h3>
-      <p class="text-muted mb-0">Đang giao</p>
-    </div>
-  </div>
-  <div class="col-md-3 col-6">
-    <div class="feature-card text-center">
-      <div class="feature-icon">&#128176;</div>
-      <h3>{{ stats.revenue|vnd }}</h3>
-      <p class="text-muted mb-0">Doanh thu (đã giao)</p>
-    </div>
-  </div>
+
 </div>
 
-<div class="row g-4">
-  <div class="col-lg-7">
-    <div class="cart-card">
-      <div class="cart-card-header">
-        <h3 class="cart-restaurant">Đơn gần đây</h3>
-        <a href="{{ url_for('restaurant.orders_view') }}" class="btn btn-outline-primary btn-sm">Xem tất cả</a>
-      </div>
-      {% if orders %}
-      <div class="table-responsive">
-        <table class="table align-middle mb-0">
-          <tbody>
-            {% for order in orders %}
-            {% set cls, label = badge.get(order.status.name, ('secondary', order.status.name)) %}
-            <tr>
-              <td>
-                <strong>Đơn #{{ order.id }}</strong>
-                <small class="d-block text-muted">{{ order.created_date.strftime('%H:%M %d/%m/%Y') }}</small>
-              </td>
-              <td>{{ order.user.full_name or order.user.username }}</td>
-              <td class="text-end">{{ order.total_amount|vnd }}</td>
-              <td class="text-end"><span class="badge bg-{{ cls }}">{{ label }}</span></td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% else %}
-      <div class="empty-state"><p>Chưa có đơn hàng nào.</p></div>
-      {% endif %}
-    </div>
-  </div>
-
-  <div class="col-lg-5">
-    <div class="cart-card">
-      <div class="cart-card-header">
-        <h3 class="cart-restaurant">Cấu hình hiện tại</h3>
-        <a href="{{ url_for('restaurant.settings_view') }}" class="btn btn-outline-primary btn-sm">Chỉnh sửa</a>
-      </div>
-      <div class="order-meta px-3 py-2 small">
-        <div>Giá trị đơn tối thiểu:
-          <strong>{{ (restaurant.min_order_amount|string + 'đ') if restaurant.min_order_amount else 'Mặc định hệ thống' }}</strong></div>
-        <div>Thời gian xác nhận: <strong>{{ restaurant.confirm_timeout_minutes }} phút</strong></div>
-        <div>Bán kính giao hàng:
-          <strong>{{ (restaurant.delivery_radius_km|string + ' km') if restaurant.delivery_radius_km else 'Mặc định 10 km' }}</strong></div>
-        <div>Số lượng tối đa 1 món/đơn:
-          <strong>{{ restaurant.max_quantity_per_item or 'Mặc định hệ thống (20)' }}</strong></div>
-        {% if restaurant.latitude is not none and restaurant.longitude is not none %}
-        <div>Tọa độ GPS:
-          <strong>{{ '%.6f'|format(restaurant.latitude) }}, {{ '%.6f'|format(restaurant.longitude) }}</strong></div>
-        {% else %}
-        <div>Tọa độ GPS:
-          <strong class="text-danger">Chưa đặt — khoảng cách giao hàng không được kiểm tra</strong></div>
-        {% endif %}
-      </div>
-      <div class="px-3 pb-3">
-        <form method="post" action="{{ url_for('restaurant.recompute_pairings') }}">
-          <button type="submit" class="btn btn-outline-success btn-sm w-100"
-                  title="Tính lại luật kết hợp món đi kèm từ các đơn đã hoàn thành">
-            &#129386; Cập nhật luật kết hợp món ăn (AI)
-          </button>
-        </form>
-      </div>
-    </div>
-  </div>
-</div>
 {% endblock %}
