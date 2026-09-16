@@ -13,12 +13,11 @@ DATABASE_HOST = os.getenv("DATABASE_HOST")
 DATABASE_NAME = os.getenv("DATABASE_NAME")
 DATABASE_PORT = os.getenv("DATABASE_PORT")
 
-
 db = SQLAlchemy()
 login = LoginManager()
 
-def create_app():
 
+def create_app():
     app = Flask(__name__)
     app.secret_key = 'trangdeptraicomotkohaip@ok'
 
