@@ -269,65 +269,113 @@ def update_dish(restaurant, dish_id, form):
     return dish
 def toggle_dish_availability(restaurant, dish_id):
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
+
     if not dish:
         raise ValueError('Món ăn không tồn tại')
-    dish.is_available = not dish.is_available
+
+    if dish.is_available:
+        dish.is_available = False
+    else:
+        dish.is_available = True
+
     db.session.commit()
+
     return dish
+
 
 def delete_dish(restaurant, dish_id):
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
+
     if not dish:
         raise ValueError('Món ăn không tồn tại')
+
     dish.active = False
     dish.is_available = False
+
     db.session.commit()
 
+
 def get_dish_for_restaurant(dish_id, restaurant_id):
-    return (Dish.query
-            .filter(Dish.id == dish_id,
-                    Dish.restaurant_id == restaurant_id,
-                    Dish.active == True)   # noqa: E712
-            .first())
+    dish = Dish.query.filter(
+        Dish.id == dish_id,
+        Dish.restaurant_id == restaurant_id,
+        Dish.active == True
+    ).first()
+
+    return dish
+
 
 def get_all_dishes(restaurant_id):
-    return (Dish.query
-            .filter(Dish.restaurant_id == restaurant_id,
-                    Dish.active == True)   # noqa: E712
-            .order_by(Dish.category_id, Dish.name)
-            .all())
+    dishes = Dish.query.filter(
+        Dish.restaurant_id == restaurant_id,
+        Dish.active == True
+    ).order_by(
+        Dish.category_id,
+        Dish.name
+    ).all()
+
+    return dishes
+
 
 def get_restaurant_orders(restaurant_id, status=None):
-    query = Order.query.filter(Order.restaurant_id == restaurant_id)
+    orders = Order.query.filter(
+        Order.restaurant_id == restaurant_id
+    )
+
     if status:
-        query = query.filter(Order.status == status)
-    return query.order_by(Order.created_date.desc(), Order.id.desc()).all()
+        orders = orders.filter(Order.status == status)
+
+    orders = orders.order_by(
+        Order.created_date.desc(),
+        Order.id.desc()
+    ).all()
+
+    return orders
+
 
 def get_order_status_counts(restaurant_id):
-    rows = (db.session.query(Order.status, func.count(Order.id))
-            .filter(Order.restaurant_id == restaurant_id)
-            .group_by(Order.status)
-            .all())
-    return {status: count for status, count in rows}
+    rows = db.session.query(
+        Order.status,
+        func.count(Order.id)
+    ).filter(
+        Order.restaurant_id == restaurant_id
+    ).group_by(
+        Order.status
+    ).all()
+
+    data = {}
+
+    for status, count in rows:
+        data[status] = count
+
+    return data
+
 
 def get_order_for_restaurant(order_id, restaurant_id):
-    return (Order.query
-            .filter(Order.id == order_id,
-                    Order.restaurant_id == restaurant_id)
-            .first())
+    order = Order.query.filter(
+        Order.id == order_id,
+        Order.restaurant_id == restaurant_id
+    ).first()
+
+    return order
+
 
 def expire_overdue_orders(restaurant_id):
     now = datetime.now()
-    overdue = (Order.query
-               .filter(Order.restaurant_id == restaurant_id,
-                       Order.status == OrderStatus.PENDING,
-                       Order.confirm_deadline.isnot(None),
-                       Order.confirm_deadline < now)
-               .all())
+
+    overdue = Order.query.filter(
+        Order.restaurant_id == restaurant_id,
+        Order.status == OrderStatus.PENDING,
+        Order.confirm_deadline.isnot(None),
+        Order.confirm_deadline < now
+    ).all()
+
     for order in overdue:
         order.status = OrderStatus.EXPIRED
-    if overdue:
+
+    if len(overdue) > 0:
         db.session.commit()
+
     return overdue
 
 
