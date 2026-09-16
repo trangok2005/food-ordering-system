@@ -34,10 +34,10 @@ def register_restaurant(owner, data):
     description = data.get('description', '').strip()
 
     if name == '':
-        raise ValueError('Vui lòng nhập tên nhà hàng')
+        raise ValueError('Vui lòng nhập tên nhà hàng.')
 
     if address == '':
-        raise ValueError('Vui lòng nhập địa chỉ nhà hàng')
+        raise ValueError('Vui lòng nhập địa chỉ nhà hàng.')
 
     if phone != '':
         if not phone.isdigit():

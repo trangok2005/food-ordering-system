@@ -42,7 +42,7 @@ def register_restaurant_view():
             dao.register_restaurant(current_user, request.form)
             current_user.role = UserRole.RESTAURANT
             dao.commit()
-            flash('Đã gửi đăng ký nhà hàng. Vui lòng chờ quản trị viên duyệt.', 'success')
+            flash('Đã gửi đăng ký nhà hàng. Hãy vui lòng chờ quản trị viên duyệt.', 'success')
             return redirect(url_for('restaurant.dashboard'))
         except ValueError as exc:
             flash(str(exc), 'error')
@@ -62,7 +62,7 @@ def menu_view():
 @login_required
 def add_category():
     return _redirect_menu(lambda restaurant: dao.add_category(
-        restaurant, request.form.get('name')), 'Đã thêm danh mục')
+        restaurant, request.form.get('name')), 'Đã thêm danh mục.')
 
 
 @restaurant_bp.route('/categories/<int:category_id>', methods=['POST'])
