@@ -70,7 +70,7 @@ def register_restaurant(owner, data):
             5,
             cast=int
         ),
-        delivery_radius_km=10,
+        delivery_radius_km=10 ,
         owner_id=owner.id
     )
 

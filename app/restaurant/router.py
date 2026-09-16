@@ -97,7 +97,7 @@ def update_dish(dish_id):
 @login_required
 def toggle_dish(dish_id):
     return _redirect_menu(lambda restaurant: dao.toggle_dish_availability(
-        restaurant, dish_id), 'Đã cập nhật trạng thái món ăn')
+        restaurant, dish_id), 'Đã cập nhật trạng thái món ăn ')
 
 
 @restaurant_bp.route('/dishes/<int:dish_id>/delete', methods=['POST'])
