@@ -118,79 +118,116 @@ def get_categories(restaurant_id):
 
 def add_category(restaurant, name):
     name = (name or '').strip()
-    if not name:
+
+    if name == '':
         raise ValueError('Vui lòng nhập tên danh mục')
+
     if len(name) > 100:
         raise ValueError('Tên danh mục tối đa 100 ký tự')
 
-    exists = (Category.query
-              .filter(Category.restaurant_id == restaurant.id,
-                      func.lower(Category.name) == func.lower(name))
-              .first())
+    exists = Category.query.filter(
+        Category.restaurant_id == restaurant.id,
+        func.lower(Category.name) == func.lower(name)
+    ).first()
+
     if exists:
         raise ValueError(f'Danh mục "{name}" đã tồn tại')
 
-    category = Category(name=name, restaurant_id=restaurant.id)
+    category = Category(
+        name=name,
+        restaurant_id=restaurant.id
+    )
+
     db.session.add(category)
     db.session.commit()
+
     return category
+
 
 def rename_category(restaurant, category_id, name):
     category = _get_category(category_id, restaurant.id)
+
     if not category:
         raise ValueError('Danh mục không tồn tại')
+
     name = (name or '').strip()
-    if not name:
+
+    if name == '':
         raise ValueError('Vui lòng nhập tên danh mục')
 
-    exists = (Category.query
-              .filter(Category.restaurant_id == restaurant.id,
-                      Category.id != category_id,
-                      func.lower(Category.name) == func.lower(name))
-              .first())
+    if len(name) > 100:
+        raise ValueError('Tên danh mục tối đa 100 ký tự')
+
+    exists = Category.query.filter(
+        Category.restaurant_id == restaurant.id,
+        Category.id != category_id,
+        func.lower(Category.name) == func.lower(name)
+    ).first()
+
     if exists:
         raise ValueError(f'Danh mục "{name}" đã tồn tại')
 
     category.name = name
+
     db.session.commit()
+
     return category
+
 
 def delete_category(restaurant, category_id):
     category = _get_category(category_id, restaurant.id)
+
+    if not category:
+        raise ValueError('Danh mục không tồn tại')
+
     if category.dishes:
         raise ValueError('Chỉ xóa được danh mục đang trống món')
+
     db.session.delete(category)
     db.session.commit()
 
+
 def _get_category(category_id, restaurant_id):
-    return (Category.query
-            .filter(Category.id == category_id,
-                    Category.restaurant_id == restaurant_id)
-            .first())
+    category = Category.query.filter(
+        Category.id == category_id,
+        Category.restaurant_id == restaurant_id
+    ).first()
+
+    return category
+
 
 def _validate_dish_input(name, price, category_id, restaurant):
     name = (name or '').strip()
-    if not name:
+
+    if name == '':
         raise ValueError('Vui lòng nhập tên món ăn')
 
     try:
         price = int(price)
     except (TypeError, ValueError):
         raise ValueError('Giá bán phải là số nguyên (VNĐ)')
+
     if price <= 0:
         raise ValueError('Giá bán phải lớn hơn 0')
+
     if price > 100_000_000:
         raise ValueError('Giá bán quá lớn, vui lòng kiểm tra lại')
 
     category = _get_category(category_id, restaurant.id)
+
     if not category:
         raise ValueError('Danh mục không hợp lệ')
 
-    return name.strip(), price, category
+    return name, price, category
+
 
 def add_dish(restaurant, form):
     name, price, category = _validate_dish_input(
-        form.get('name'), form.get('price'), form.get('category_id'), restaurant)
+        form.get('name'),
+        form.get('price'),
+        form.get('category_id'),
+        restaurant
+    )
 
     dish = Dish(
         name=name,
@@ -199,28 +236,37 @@ def add_dish(restaurant, form):
         image=(form.get('image') or '').strip() or None,
         is_available=True,
         restaurant_id=restaurant.id,
-        category_id=category.id,
+        category_id=category.id
     )
+
     db.session.add(dish)
     db.session.commit()
+
     return dish
+
 
 def update_dish(restaurant, dish_id, form):
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
+
     if not dish:
         raise ValueError('Món ăn không tồn tại')
 
     name, price, category = _validate_dish_input(
-        form.get('name'), form.get('price'), form.get('category_id'), restaurant)
+        form.get('name'),
+        form.get('price'),
+        form.get('category_id'),
+        restaurant
+    )
 
     dish.name = name
     dish.price = price
     dish.category_id = category.id
     dish.description = (form.get('description') or '').strip() or None
     dish.image = (form.get('image') or '').strip() or None
-    db.session.commit()
-    return dish
 
+    db.session.commit()
+
+    return dish
 def toggle_dish_availability(restaurant, dish_id):
     dish = get_dish_for_restaurant(dish_id, restaurant.id)
     if not dish:
