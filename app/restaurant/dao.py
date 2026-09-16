@@ -10,6 +10,7 @@ from app.models import (
     OrderStatus,
     Restaurant,
     RestaurantStatus,
+    SystemConfig,
 )
 
 NEXT_STATUS = {
@@ -22,40 +23,77 @@ def get_restaurant_for_owner(user_id):
     return Restaurant.query.filter(Restaurant.owner_id == user_id).first()
 
 def register_restaurant(owner, data):
-    if get_restaurant_for_owner(owner.id):
+    restaurant = get_restaurant_for_owner(owner.id)
+
+    if restaurant:
         raise ValueError('Tài khoản này đã đăng ký nhà hàng rồi')
 
-    name = (data.get('name') or '').strip()
-    address = (data.get('address') or '').strip()
-    phone = (data.get('phone') or '').strip()
-    description = (data.get('description') or '').strip()
+    name = data.get('name', '').strip()
+    address = data.get('address', '').strip()
+    phone = data.get('phone', '').strip()
+    description = data.get('description', '').strip()
 
-    if not name:
+    if name == '':
         raise ValueError('Vui lòng nhập tên nhà hàng')
-    if not address:
+
+    if address == '':
         raise ValueError('Vui lòng nhập địa chỉ nhà hàng')
 
-    latitude = _parse_float(data.get('latitude'))
-    longitude = _parse_float(data.get('longitude'))
+    if phone != '':
+        if not phone.isdigit():
+            raise ValueError('Số điện thoại chỉ được nhập số')
+
+        if len(phone) < 10 or len(phone) > 11:
+            raise ValueError('Số điện thoại phải từ 10 đến 11 số')
+
+    latitude = _parse_coordinate(
+        data.get('latitude'), -90, 90, 'Vĩ độ'
+    )
+
+    longitude = _parse_coordinate(
+        data.get('longitude'), -180, 180, 'Kinh độ'
+    )
+
+    if latitude is None or longitude is None:
+        raise ValueError('Vui lòng cung cấp đầy đủ tọa độ GPS của nhà hàng')
 
     restaurant = Restaurant(
         name=name,
         address=address,
-        phone=phone or None,
-        description=description or None,
+        phone=phone if phone != '' else None,
+        description=description if description != '' else None,
         latitude=latitude,
         longitude=longitude,
         status=RestaurantStatus.PENDING,
-        owner_id=owner.id,
+        confirm_timeout_minutes=SystemConfig.get(
+            'DEFAULT_CONFIRM_TIMEOUT_MINUTES',
+            5,
+            cast=int
+        ),
+        delivery_radius_km=10,
+        owner_id=owner.id
     )
+
     db.session.add(restaurant)
-    db.session.commit()
+    db.session.flush()
+
     return restaurant
+
+def commit():
+    db.session.commit()
 
 def _parse_float(raw):
     raw = (raw or '').strip()
     if not raw:
         return None
+
+def _parse_coordinate(raw, minimum, maximum, label):
+    value = _parse_float(raw)
+    if value is None:
+        return None
+    if not minimum <= value <= maximum:
+        raise ValueError(f'{label} phải nằm trong khoảng {minimum} đến {maximum}')
+    return value
     try:
         return float(raw)
     except (TypeError, ValueError):
@@ -88,6 +126,8 @@ def add_category(restaurant, name):
 
 def rename_category(restaurant, category_id, name):
     category = _get_category(category_id, restaurant.id)
+    if not category:
+        raise ValueError('Danh mục không tồn tại')
     name = (name or '').strip()
     if not name:
         raise ValueError('Vui lòng nhập tên danh mục')
@@ -106,8 +146,7 @@ def rename_category(restaurant, category_id, name):
 
 def delete_category(restaurant, category_id):
     category = _get_category(category_id, restaurant.id)
-    active_dishes = [d for d in category.dishes if d.active]
-    if active_dishes:
+    if category.dishes:
         raise ValueError('Chỉ xóa được danh mục đang trống món')
     db.session.delete(category)
     db.session.commit()
@@ -127,8 +166,8 @@ def _validate_dish_input(name, price, category_id, restaurant):
         price = int(price)
     except (TypeError, ValueError):
         raise ValueError('Giá bán phải là số nguyên (VNĐ)')
-    if price < 0:
-        raise ValueError('Giá bán không được âm')
+    if price <= 0:
+        raise ValueError('Giá bán phải lớn hơn 0')
     if price > 100_000_000:
         raise ValueError('Giá bán quá lớn, vui lòng kiểm tra lại')
 
@@ -234,6 +273,19 @@ def expire_overdue_orders(restaurant_id):
         db.session.commit()
     return overdue
 
+
+def expire_all_overdue_orders():
+    now = datetime.now()
+    count = (Order.query
+             .filter(Order.status == OrderStatus.PENDING,
+                     Order.confirm_deadline.isnot(None),
+                     Order.confirm_deadline < now)
+             .update({Order.status: OrderStatus.EXPIRED},
+                     synchronize_session=False))
+    if count:
+        db.session.commit()
+    return count
+
 def confirm_order(order):
     if order.is_expired():
         order.status = OrderStatus.EXPIRED
@@ -243,10 +295,18 @@ def confirm_order(order):
     if order.status != OrderStatus.PENDING:
         raise ValueError('Đơn này không thể xác nhận')
 
-    order.status = OrderStatus.CONFIRMED
-    order.confirmed_at = datetime.now()
-
+    now = datetime.now()
+    changed = (Order.query
+               .filter(Order.id == order.id,
+                       Order.status == OrderStatus.PENDING,
+                       Order.confirm_deadline >= now)
+               .update({Order.status: OrderStatus.CONFIRMED,
+                        Order.confirmed_at: now}, synchronize_session=False))
+    if not changed:
+        db.session.rollback()
+        raise ValueError('Đơn này không thể xác nhận')
     db.session.commit()
+    db.session.refresh(order)
 
     return order
 
@@ -254,8 +314,15 @@ def advance_order(order):
     next_status = NEXT_STATUS.get(order.status)
     if not next_status:
         raise ValueError('Trạng thái hiện tại của đơn không thể chuyển tiếp')
-    order.status = next_status
+    previous = order.status
+    changed = (Order.query
+               .filter(Order.id == order.id, Order.status == previous)
+               .update({Order.status: next_status}, synchronize_session=False))
+    if not changed:
+        db.session.rollback()
+        raise ValueError('Trạng thái đơn đã được thay đổi bởi thao tác khác')
     db.session.commit()
+    db.session.refresh(order)
     return order
 
 
@@ -279,7 +346,7 @@ def cancel_order(order, reason):
     db.session.commit()
 
     return order
-d
+
 
 def get_dashboard_stats(restaurant_id):
     counts = get_order_status_counts(restaurant_id)
