@@ -9,7 +9,8 @@ auth_bp = Blueprint('auth',__name__,url_prefix='/auth')
 def load_user(user_id):
     from app.auth import dao
 
-    return dao.get_user_by_id(user_id)
+    user = dao.get_user_by_id(user_id)
+    return user if user and user.active else None
 
 
 from app.auth import router

@@ -23,9 +23,11 @@ def get_user_by_email(email):
 
 
 def get_user_by_oauth(provider, provider_uid):
-    account = (OAuthAccount.query
-               .filter_by(provider=provider, provider_uid=provider_uid)
-               .first())
+    account = (
+        OAuthAccount.query
+        .filter_by(provider=provider, provider_uid=provider_uid)
+        .first()
+    )
     return account.user if account else None
 
 
@@ -41,22 +43,25 @@ def _unique_username_from_email(email):
 
 
 def get_or_create_google_user(provider_uid, email, full_name=None, avatar=None):
-    """Tìm user đã liên kết OAuth Google. Nếu chưa có thì tìm theo email
-    (link OAuth vào tài khoản nội bộ hiện có), còn không thì tạo user mới."""
+    """Liên kết Google với tài khoản cùng email hoặc tạo tài khoản mới."""
     provider_uid = str(provider_uid)
     email = (email or '').strip()
 
-    account = (OAuthAccount.query
-               .filter_by(provider=AuthProvider.GOOGLE, provider_uid=provider_uid)
-               .first())
+    account = (
+        OAuthAccount.query
+        .filter_by(provider=AuthProvider.GOOGLE, provider_uid=provider_uid)
+        .first()
+    )
     if account:
         return account.user
 
     user = get_user_by_email(email)
     if user:
-        db.session.add(OAuthAccount(provider=AuthProvider.GOOGLE,
-                                    provider_uid=provider_uid,
-                                    user_id=user.id))
+        db.session.add(OAuthAccount(
+            provider=AuthProvider.GOOGLE,
+            provider_uid=provider_uid,
+            user_id=user.id,
+        ))
         db.session.commit()
         return user
 
@@ -70,9 +75,11 @@ def get_or_create_google_user(provider_uid, email, full_name=None, avatar=None):
     user.set_password(secrets.token_urlsafe(24))
     db.session.add(user)
     db.session.flush()
-    db.session.add(OAuthAccount(provider=AuthProvider.GOOGLE,
-                                provider_uid=provider_uid,
-                                user_id=user.id))
+    db.session.add(OAuthAccount(
+        provider=AuthProvider.GOOGLE,
+        provider_uid=provider_uid,
+        user_id=user.id,
+    ))
     db.session.commit()
     return user
 
@@ -84,15 +91,20 @@ def auth_user(username, password):
     username = username.strip()
     password = password.strip()
     user = get_user_by_username(username)
-    if user and user.check_password(password):
+    if user and user.active and user.check_password(password):
         return user
     return None
 
 
-# ---------- HỒ SƠ & MẬT KHẨU ----------
+def register_failed_login(username):
+    user = get_user_by_username(username) if username else None
+    if user and user.active and not user.is_locked():
+        user.register_failed_login()
+        db.session.commit()
+    return user
+
 
 def update_profile(user, data):
-    """Cập nhật hồ sơ cá nhân: họ tên, SĐT, địa chỉ, avatar (link)."""
     phone = (data.get('phone') or '').strip()
     if phone and (not phone.isdigit() or not (10 <= len(phone) <= 11)):
         raise ValueError('Số điện thoại phải từ 10 đến 11 ký số')
@@ -106,10 +118,11 @@ def update_profile(user, data):
 
 
 def change_password(user, current_password, new_password, confirm_password):
-    """Đổi mật khẩu: phải biết mật khẩu hiện tại."""
     if not user.password:
-        raise ValueError('Tài khoản Google chưa đặt mật khẩu nội bộ, '
-                         'hãy dùng chức năng quên mật khẩu')
+        raise ValueError(
+            'Tài khoản Google chưa đặt mật khẩu nội bộ, '
+            'hãy dùng chức năng quên mật khẩu'
+        )
     if not user.check_password((current_password or '').strip()):
         raise ValueError('Mật khẩu hiện tại không đúng')
     if (new_password or '') != (confirm_password or ''):
@@ -127,9 +140,7 @@ def _validate_new_password(new_password):
 
 
 def create_reset_token(username_or_email):
-    """Tạo token quên mật khẩu cho tài khoản khớp username hoặc email.
-    Trả về (user, token); không tìm thấy thì trả về (None, None)
-    để tránh lộ thông tin tài khoản nào tồn tại."""
+    """Tạo token đặt lại mật khẩu, hết hạn sau 30 phút."""
     raw = (username_or_email or '').strip()
     if not raw:
         return None, None
@@ -140,14 +151,15 @@ def create_reset_token(username_or_email):
 
     token = secrets.token_urlsafe(32)
     user.reset_token = token
-    user.reset_token_expires = datetime.now() + timedelta(minutes=RESET_TOKEN_MINUTES)
+    user.reset_token_expires = datetime.now() + timedelta(
+        minutes=RESET_TOKEN_MINUTES
+    )
     db.session.commit()
     return user, token
 
 
 def reset_password(token, new_password, confirm_password):
-    """Đặt lại mật khẩu bằng token. Token chỉ dùng được 1 lần và
-    hết hạn sau RESET_TOKEN_MINUTES phút."""
+    """Đặt lại mật khẩu bằng token còn hạn và chỉ dùng một lần."""
     if not token:
         raise ValueError('Link đặt lại mật khẩu không hợp lệ')
     if (new_password or '') != (confirm_password or ''):
@@ -169,7 +181,10 @@ def reset_password(token, new_password, confirm_password):
     return user
 
 
-def add_user(username, password, email, full_name=None, phone=None, address=None, role=UserRole.CUSTOMER):
+def add_user(
+    username, password, email, full_name=None, phone=None, address=None,
+    role=UserRole.CUSTOMER,
+):
     username = username.strip()
     if len(username) < 3:
         raise ValueError('Username tối thiểu 3 ký tự')

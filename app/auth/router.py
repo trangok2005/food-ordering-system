@@ -1,6 +1,7 @@
 import os
 import secrets
 from urllib.parse import urlencode
+from urllib.parse import urlparse
 
 import requests
 from flask import request, render_template, redirect, url_for, flash, session
@@ -21,18 +22,26 @@ def _google_client_id():
 
 
 def _google_configured():
-    return bool(_google_client_id() and os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
-                and not _google_client_id().startswith('your_'))
+    return bool(
+        _google_client_id()
+        and os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
+        and not _google_client_id().startswith('your_')
+    )
 
 
 def _redirect_after_login(user):
-    """Nhà hàng đăng nhập xong nhảy thẳng vào trang quản lý nhà hàng,
-    admin vào trang quản trị, các vai trò khác về trang chủ."""
     if user.role.name == 'RESTAURANT':
         return url_for('restaurant.dashboard')
     if user.role.name == 'ADMIN':
         return url_for('admin.dashboard')
     return url_for('index')
+
+
+def _safe_next(target):
+    parsed = urlparse(target or '')
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith('/'):
+        return None
+    return target
 
 
 @auth_bp.route('/login', methods=['GET'])
@@ -47,20 +56,41 @@ def login_process():
     username = request.form.get('username', '').strip()
     password = request.form.get('password', '')
 
-    # Chặn dò mật khẩu: tối đa 10 lần thử / 5 phút cho mỗi cặp (IP, username)
+    # Chặn dò mật khẩu theo IP + username.
     if login_rate_limiter.is_blocked(request.remote_addr, username):
         return render_template(
             'auth/login.html',
-            err_msg='Bạn đã thử đăng nhập quá nhiều lần. Vui lòng đợi 5 phút rồi thử lại.')
+            err_msg=(
+                'Bạn đã thử đăng nhập quá nhiều lần. '
+                'Vui lòng đợi 5 phút rồi thử lại.'
+            ),
+        )
 
     user = dao.auth_user(username, password)
 
     if not user:
+        attempted_user = dao.register_failed_login(username)
         login_rate_limiter.record_failure(request.remote_addr, username)
-        return render_template('auth/login.html', err_msg='Sai tên đăng nhập hoặc mật khẩu')
+        if attempted_user and attempted_user.is_locked():
+            return render_template(
+                'auth/login.html',
+                err_msg=(
+                    'Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. '
+                    'Vui lòng thử lại sau 15 phút.'
+                ),
+            )
+        return render_template(
+            'auth/login.html', err_msg='Sai tên đăng nhập hoặc mật khẩu'
+        )
 
     if user.is_locked():
-        return render_template('auth/login.html', err_msg='Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.')
+        return render_template(
+            'auth/login.html',
+            err_msg=(
+                'Tài khoản đã bị khóa do đăng nhập sai quá nhiều lần. '
+                'Vui lòng thử lại sau 15 phút.'
+            ),
+        )
 
     login_user(user)
     user.reset_failed_login()
@@ -72,7 +102,7 @@ def login_process():
     if user.role.name == 'ADMIN':
         return redirect(url_for('admin.dashboard'))
     next_page = request.args.get('next')
-    return redirect(next_page if next_page else url_for('index'))
+    return redirect(_safe_next(next_page) or url_for('index'))
 
 
 @auth_bp.route('/register', methods=['GET'])
@@ -111,17 +141,23 @@ def register_process():
     except ValueError as e:
         return render_template('auth/register.html', err_msg=str(e))
     except Exception as e:
-        return render_template('auth/register.html', err_msg='Đã xảy ra lỗi, vui lòng thử lại')
+        return render_template(
+            'auth/register.html', err_msg='Đã xảy ra lỗi, vui lòng thử lại'
+        )
 
 
 @auth_bp.route('/login/google')
 def google_login():
     if not _google_configured():
-        flash('Chưa cấu hình Google OAuth. Vui lòng điền GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET vào .env', 'error')
+        flash(
+            'Chưa cấu hình Google OAuth. '
+            'Vui lòng điền GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET vào .env',
+            'error',
+        )
         return redirect(url_for('auth.login_view'))
 
     next_page = request.args.get('next')
-    if next_page:
+    if _safe_next(next_page):
         session['oauth_next'] = next_page
 
     params = {
@@ -151,34 +187,45 @@ def google_callback():
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET', '').strip()
     redirect_uri = url_for('auth.google_callback', _external=True)
 
-    token_resp = requests.post(GOOGLE_TOKEN_URL, data={
-        'code': code,
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'redirect_uri': redirect_uri,
-        'grant_type': 'authorization_code',
-    }, timeout=15)
+    token_resp = requests.post(
+        GOOGLE_TOKEN_URL,
+        data={
+            'code': code,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        },
+        timeout=15,
+    )
     token_data = token_resp.json()
     access_token = token_data.get('access_token')
     if not access_token:
         flash('Không lấy được token từ Google', 'error')
         return redirect(url_for('auth.login_view'))
 
-    userinfo_resp = requests.get(GOOGLE_USERINFO_URL,
-                                 headers={'Authorization': f'Bearer {access_token}'},
-                                 timeout=15)
+    userinfo_resp = requests.get(
+        GOOGLE_USERINFO_URL,
+        headers={'Authorization': f'Bearer {access_token}'},
+        timeout=15,
+    )
     info = userinfo_resp.json()
-    if not info.get('sub') or not info.get('email'):
+    if not info.get('sub') or not info.get('email') or not info.get('email_verified'):
         flash('Không lấy được thông tin tài khoản Google', 'error')
         return redirect(url_for('auth.login_view'))
 
     try:
         user = dao.get_or_create_google_user(
             info['sub'], info['email'],
-            full_name=info.get('name'), avatar=info.get('picture'))
+            full_name=info.get('name'), avatar=info.get('picture'),
+        )
     except Exception:
         db.session.rollback()
         flash('Đã xảy ra lỗi khi liên kết tài khoản Google', 'error')
+        return redirect(url_for('auth.login_view'))
+
+    if not user.active:
+        flash('Tài khoản đã bị quản trị viên khóa.', 'error')
         return redirect(url_for('auth.login_view'))
 
     login_user(user)
@@ -190,7 +237,7 @@ def google_callback():
     if user.role.name == 'ADMIN':
         return redirect(url_for('admin.dashboard'))
     next_page = session.pop('oauth_next', '')
-    return redirect(next_page if next_page else url_for('index'))
+    return redirect(_safe_next(next_page) or url_for('index'))
 
 
 @auth_bp.route('/logout')
@@ -199,21 +246,20 @@ def logout_process():
     return redirect(url_for('auth.login_view'))
 
 
-# ---------- HỒ SƠ & MẬT KHẨU ----------
-
 @auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile_view():
-    """Xem và cập nhật hồ sơ cá nhân + đổi mật khẩu."""
     if request.method == 'POST':
         action = request.form.get('action')
 
         try:
             if action == 'change_password':
-                dao.change_password(current_user,
-                                    request.form.get('current_password'),
-                                    request.form.get('new_password'),
-                                    request.form.get('confirm_password'))
+                dao.change_password(
+                    current_user,
+                    request.form.get('current_password'),
+                    request.form.get('new_password'),
+                    request.form.get('confirm_password'),
+                )
                 flash('Đã đổi mật khẩu thành công')
             else:
                 dao.update_profile(current_user, request.form)
@@ -228,16 +274,15 @@ def profile_view():
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password_view():
-    """Yêu cầu đặt lại mật khẩu: nhập username hoặc email.
-    Hệ thống sinh token một lần (hết hạn 30 phút). Vì demo chạy local
-    không có SMTP, link đặt lại được hiển thị trực tiếp trên màn hình."""
+    """Hiển thị link đặt lại mật khẩu trực tiếp vì demo chưa có SMTP."""
     reset_url = None
 
     if request.method == 'POST':
         user, token = dao.create_reset_token(request.form.get('identifier'))
         if user and token:
-            reset_url = url_for('auth.reset_password_view',
-                                token=token, _external=True)
+            reset_url = url_for(
+                'auth.reset_password_view', token=token, _external=True
+            )
 
     return render_template('auth/forgot_password.html', reset_url=reset_url)
 
@@ -248,13 +293,16 @@ def reset_password_view():
 
     if request.method == 'POST':
         try:
-            dao.reset_password(token,
-                               request.form.get('new_password'),
-                               request.form.get('confirm_password'))
+            dao.reset_password(
+                token,
+                request.form.get('new_password'),
+                request.form.get('confirm_password'),
+            )
             flash('Đặt lại mật khẩu thành công. Vui lòng đăng nhập.')
             return redirect(url_for('auth.login_view'))
         except ValueError as e:
-            return render_template('auth/reset_password.html',
-                                   err_msg=str(e), token=token)
+            return render_template(
+                'auth/reset_password.html', err_msg=str(e), token=token
+            )
 
     return render_template('auth/reset_password.html', token=token)

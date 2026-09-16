@@ -3,12 +3,7 @@ import time
 
 
 class LoginRateLimiter:
-    """Giới hạn số lần thử đăng nhập theo cặp (IP, username).
-
-    Mục đích: chặn dò mật khẩu tự động. Lưu trong bộ nhớ của tiến trình
-    (đủ cho demo/deploy 1 tiến trình); tài khoản bị khóa lâu hơn vẫn do
-    User.failed_login_count / locked_until xử lý trong DB.
-    """
+    """Giới hạn đăng nhập theo IP + username trong bộ nhớ từng tiến trình."""
 
     def __init__(self, max_attempts=10, window_seconds=300):
         self.max_attempts = max_attempts
@@ -20,8 +15,10 @@ class LoginRateLimiter:
         return f'{ip}|{(username or "").strip().lower()}'
 
     def _prune(self, now):
-        expired = [k for k, hits in self._attempts.items()
-                   if now - hits[-1] > self.window_seconds]
+        expired = [
+            k for k, hits in self._attempts.items()
+            if now - hits[-1] > self.window_seconds
+        ]
         for k in expired:
             del self._attempts[k]
 
@@ -36,8 +33,10 @@ class LoginRateLimiter:
         with self._lock:
             key = self._key(ip, username)
             now = time.monotonic()
-            hits = [t for t in self._attempts.get(key, [])
-                    if now - t <= self.window_seconds]
+            hits = [
+                t for t in self._attempts.get(key, [])
+                if now - t <= self.window_seconds
+            ]
             hits.append(now)
             self._attempts[key] = hits
 
