@@ -166,7 +166,7 @@ def settings_view():
     if request.method == 'POST':
         try:
             dao.update_restaurant_settings(restaurant, request.form)
-            flash('Đã lưu cấu hình nhà hàng')
+            flash('Đã lưu cấu hình nhà hàng.')
 
             return redirect(url_for('restaurant.settings_view'))
 
@@ -189,7 +189,7 @@ def orders_view():
 
     if expired_orders:
         flash(
-            f'{len(expired_orders)} đơn quá hạn xác nhận đã tự động hủy',
+            f'{len(expired_orders)} đơn quá hạn xác nhận đã tự động hủy.',
             'warning'
         )
 
@@ -223,7 +223,7 @@ def confirm_order(order_id):
 
     try:
         dao.confirm_order(order)
-        flash(f'Đã xác nhận đơn #{order.id}')
+        flash(f'Đã xác nhận đơn: #{order.id}')
 
     except ValueError as e:
         flash(str(e), 'error')
@@ -258,7 +258,7 @@ def cancel_order(order_id):
 
     try:
         dao.cancel_order(order, reason)
-        flash(f'Đã hủy đơn #{order.id}')
+        flash(f'Đã hủy đơn  #{order.id}')
 
     except ValueError as e:
         flash(str(e), 'error')

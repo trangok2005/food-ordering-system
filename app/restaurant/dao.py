@@ -78,32 +78,43 @@ def register_restaurant(owner, data):
     db.session.flush()
 
     return restaurant
-
 def commit():
     db.session.commit()
 
+
 def _parse_float(raw):
     raw = (raw or '').strip()
-    if not raw:
+
+    if raw == '':
         return None
 
-def _parse_coordinate(raw, minimum, maximum, label):
-    value = _parse_float(raw)
-    if value is None:
-        return None
-    if not minimum <= value <= maximum:
-        raise ValueError(f'{label} phải nằm trong khoảng {minimum} đến {maximum}')
-    return value
     try:
         return float(raw)
     except (TypeError, ValueError):
         return None
 
+
+def _parse_coordinate(raw, minimum, maximum, label):
+    value = _parse_float(raw)
+
+    if value is None:
+        return None
+
+    if value < minimum or value > maximum:
+        raise ValueError(
+            f'{label} phải nằm trong khoảng {minimum} đến {maximum}'
+        )
+
+    return value
+
+
 def get_categories(restaurant_id):
-    return (Category.query
-            .filter(Category.restaurant_id == restaurant_id)
-            .order_by(Category.name)
-            .all())
+    return (
+        Category.query
+        .filter(Category.restaurant_id == restaurant_id)
+        .order_by(Category.name)
+        .all()
+    )
 
 def add_category(restaurant, name):
     name = (name or '').strip()
