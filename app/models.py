@@ -333,6 +333,26 @@ class OrderDetail(BaseModel):
     unit_price = Column(Integer, nullable=False)     # snapshot giá dish.price tại thời điểm đặt
 
 
+class PaymentAttempt(BaseModel):
+    __tablename__ = 'payment_attempt'
+
+    order_code = Column(String(20), nullable=False, unique=True, index=True)
+    payment_request_id = Column(String(100), nullable=False, unique=True, index=True)
+    amount = Column(Integer, nullable=False, default=0)
+    payload = Column(Text, nullable=True)          # toàn bộ pending payment (JSON)
+    user_id = Column(Integer, ForeignKey(User.id), nullable=False)
+    status = Column(String(20), nullable=False, default='PENDING')   # PENDING / PROCESSED
+    processed_at = Column(DateTime, nullable=True)
+    result_order_ids = Column(String(255), nullable=True)             # các Order tạo ra, cách nhau bằng ','
+
+    created_date = Column(DateTime, default=datetime.now)
+
+    user = relationship('User', backref='payment_attempts', lazy=True)
+
+    def __str__(self):
+        return f"PaymentAttempt#{self.id} - {self.order_code}"
+
+
 # 6. TÍNH NĂNG THÔNG MINH (AI)
 #    - Review: lưu đánh giá + kết quả phân tích cảm xúc (Gemini API).
 #    - DishPairing: kết quả luật kết hợp (association rules) chạy
