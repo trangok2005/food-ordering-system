@@ -1,5 +1,6 @@
 import secrets
 import time
+import math
 from urllib.parse import urlparse
 
 from flask import (
@@ -176,6 +177,18 @@ def create_payment():
             'Vui lòng nhập địa chỉ và số điện thoại nhận hàng',
             'error'
         )
+
+    if len(address) > 255 or len(note) > 255:
+        flash('Địa chỉ và ghi chú chỉ được dài tối đa 255 ký tự.', 'error')
+        return redirect(url_for('cart.checkout_view'))
+    if not (phone.isdigit() and 10 <= len(phone) <= 11):
+        flash('Số điện thoại phải từ 10 đến 11 ký số.', 'error')
+        return redirect(url_for('cart.checkout_view'))
+    if ((lat is None) != (lng is None) or
+            (lat is not None and (not math.isfinite(lat) or not -90 <= lat <= 90)) or
+            (lng is not None and (not math.isfinite(lng) or not -180 <= lng <= 180))):
+        flash('Tọa độ GPS không hợp lệ.', 'error')
+        return redirect(url_for('cart.checkout_view'))
         return redirect(
             url_for('cart.checkout_view')
         )
@@ -287,6 +300,12 @@ def create_payment():
         'lng': lng,
     })
 
+    try:
+        dao.save_payment_attempt(current_user.id, pending)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('cart.checkout_view'))
+
     session['pending_payment'] = pending
     session.modified = True
 
@@ -296,6 +315,7 @@ def create_payment():
 
 
 @cart_bp.route('/mock-payos/<payment_id>')
+@login_required
 def mock_checkout_view(payment_id):
     """Trang thanh toán PayOS GIẢ LẬP - chỉ tồn tại khi PAYOS_MODE != live.
     Mô phỏng trang checkout của PayOS để demo luồng thanh toán trên localhost."""
@@ -308,6 +328,8 @@ def mock_checkout_view(payment_id):
     )
 
     if not payment:
+        abort(404)
+    if not dao.get_payment_attempt(payment_id, current_user.id):
         abort(404)
 
     return render_template(
@@ -332,6 +354,9 @@ def mock_pay(payment_id):
 
     if not payment:
         abort(404)
+    if not current_user.is_authenticated or not dao.get_payment_attempt(
+            payment_id, current_user.id):
+        abort(403)
 
     payment['status'] = 'PAID'
 
@@ -369,6 +394,9 @@ def mock_cancel(payment_id):
 
     if not payment:
         abort(404)
+    if not current_user.is_authenticated or not dao.get_payment_attempt(
+            payment_id, current_user.id):
+        abort(403)
 
     payment['status'] = 'CANCELLED'
 
@@ -394,9 +422,11 @@ def payment_return():
         'id'
     )
 
-    pending = session.get(
-        'pending_payment'
-    )
+    attempt = dao.get_payment_attempt(payment_request_id, current_user.id)
+    pending = session.get('pending_payment')
+    if attempt:
+        import json
+        pending = json.loads(attempt.payload)
 
     if not pending or not payment_request_id:
         flash(
@@ -430,10 +460,8 @@ def payment_return():
 
     if status == 'PAID':
         try:
-            orders = dao.create_orders_from_pending(
-                current_user.id,
-                pending
-            )
+            orders = (dao.finalize_payment_attempt(payment_request_id, current_user.id)
+                      if attempt else dao.create_orders_from_pending(current_user.id, pending))
 
         except ValueError as e:
             flash(
@@ -514,6 +542,28 @@ def payment_cancel():
         status='CANCELLED',
         total=(pending or {}).get('total')
     )
+
+
+@cart_bp.route('/webhook/payos', methods=['POST'])
+def payment_webhook():
+    """Webhook live dùng cùng dịch vụ hoàn tất idempotent với return URL."""
+    payload = request.get_json(silent=True) or {}
+    if not payos.verify_webhook(payload):
+        return jsonify({'success': False, 'message': 'Chữ ký không hợp lệ'}), 400
+    data = payload.get('data') or {}
+    attempt = dao.get_payment_attempt_by_order_code(data.get('orderCode'))
+    if not attempt:
+        return jsonify({'success': False, 'message': 'Không tìm thấy phiên thanh toán'}), 404
+    if int(data.get('amount') or 0) != attempt.amount:
+        return jsonify({'success': False, 'message': 'Số tiền không khớp'}), 400
+    paid = payload.get('success') is True and data.get('code') == '00'
+    if not paid:
+        return jsonify({'success': True, 'message': 'Trạng thái chưa thanh toán'}), 200
+    try:
+        dao.finalize_payment_attempt(attempt.payment_request_id)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 409
+    return jsonify({'success': True}), 200
 
 
 @cart_bp.route('/my-orders')
@@ -698,11 +748,7 @@ def confirm_switch():
         )
 
     try:
-        dao.clear_all_carts(
-            current_user.id
-        )
-
-        dao.add_to_cart(
+        dao.switch_restaurant_cart(
             current_user.id,
             dish_id,
             quantity
