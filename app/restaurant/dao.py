@@ -7,6 +7,7 @@ from app.models import (
     Category,
     Dish,
     Order,
+    OrderDetail,
     OrderStatus,
     PaymentStatus,
     Restaurant,
@@ -574,3 +575,120 @@ def update_restaurant_settings(restaurant, data):
     restaurant.longitude = longitude
     db.session.commit()
     return restaurant
+def get_order_status_counts():
+    rows = (
+        db.session.query(Order.status, func.count(Order.id))
+        .group_by(Order.status)
+        .all()
+    )
+    return {status: count for status, count in rows}
+
+
+def get_top_restaurants(limit=5):
+    return (
+        db.session.query(
+            Restaurant,
+            func.count(Order.id).label('order_count'),
+            func.coalesce(func.sum(Order.total_amount), 0).label('revenue'),
+        )
+        .join(Order, Order.restaurant_id == Restaurant.id)
+        .filter(Order.status.in_([
+            OrderStatus.COMPLETED, OrderStatus.DELIVERING
+        ]))
+        .group_by(Restaurant.id)
+        .order_by(func.sum(Order.total_amount).desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_top_dishes(limit=5):
+    return (
+        db.session.query(
+            Dish,
+            func.coalesce(func.sum(OrderDetail.quantity), 0).label('total_qty'),
+            func.coalesce(
+                func.sum(OrderDetail.unit_price * OrderDetail.quantity), 0
+            ).label('revenue'),
+        )
+        .join(OrderDetail, OrderDetail.dish_id == Dish.id)
+        .join(Order, Order.id == OrderDetail.order_id)
+        .filter(Order.status.in_([
+            OrderStatus.COMPLETED, OrderStatus.DELIVERING
+        ]))
+        .group_by(Dish.id)
+        .order_by(func.sum(OrderDetail.quantity).desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_recent_orders(limit=8):
+    return (
+        Order.query
+        .order_by(Order.created_date.desc(), Order.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def get_orders(status=None):
+    query = Order.query
+    if status:
+        query = query.filter(Order.status == status)
+    return query.order_by(Order.created_date.desc(), Order.id.desc()).all()
+
+
+def get_pending_restaurants():
+    return (
+        Restaurant.query
+        .filter(Restaurant.status == RestaurantStatus.PENDING)
+        .order_by(Restaurant.id.desc())
+        .all()
+    )
+
+
+def get_restaurants(status=None):
+    query = Restaurant.query
+    if status:
+        query = query.filter(Restaurant.status == status)
+    return query.order_by(Restaurant.id.desc()).all()
+
+
+def get_restaurant(restaurant_id):
+    return Restaurant.query.get(restaurant_id)
+
+
+def get_restaurant_dishes(restaurant_id):
+    return (
+        Dish.query.filter(Dish.restaurant_id == restaurant_id)
+        .order_by(Dish.active.desc(), Dish.category_id, Dish.name)
+        .all()
+    )
+
+
+def approve_restaurant(restaurant):
+    if restaurant.status != RestaurantStatus.PENDING:
+        raise ValueError('Chỉ duyệt được nhà hàng đang chờ duyệt')
+    restaurant.status = RestaurantStatus.APPROVED
+    db.session.commit()
+    return restaurant
+
+
+def lock_restaurant(restaurant):
+    if restaurant.status != RestaurantStatus.APPROVED:
+        raise ValueError('Chỉ khóa được nhà hàng đã được duyệt')
+    restaurant.status = RestaurantStatus.LOCKED
+    db.session.commit()
+    return restaurant
+
+
+def unlock_restaurant(restaurant):
+    if restaurant.status != RestaurantStatus.LOCKED:
+        raise ValueError('Chỉ mở khóa được nhà hàng đang bị khóa')
+    restaurant.status = RestaurantStatus.APPROVED
+    db.session.commit()
+    return restaurant
+
+
+

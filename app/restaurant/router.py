@@ -306,3 +306,84 @@ def dashboard():
         active='dashboard',
     )
 
+@admin_bp.route('/stats')
+def stats_view():
+    stats = dao.get_dashboard_stats()
+    order_counts = dao.get_order_status_counts()
+    top_restaurants = dao.get_top_restaurants()
+    top_dishes = dao.get_top_dishes()
+    return render_template(
+        'admin/stats.html',
+        stats=stats,
+        order_counts=order_counts,
+        top_restaurants=top_restaurants,
+        top_dishes=top_dishes,
+        OrderStatus=OrderStatus,
+        active='stats',
+    )
+
+
+@admin_bp.route('/orders')
+def orders_view():
+    status = _order_status_from_name(request.args.get('status'))
+    return render_template(
+        'admin/orders.html', orders=dao.get_orders(status),
+        statuses=OrderStatus, current_status=status, active='orders',
+    )
+
+
+@admin_bp.route('/restaurants')
+def restaurants_view():
+    status = _status_from_name(request.args.get('status'))
+    restaurants = dao.get_restaurants(status)
+    return render_template(
+        'admin/restaurants.html',
+        restaurants=restaurants,
+        statuses=RestaurantStatus,
+        current_status=status,
+        active='restaurants',
+    )
+
+
+@admin_bp.route('/restaurants/<int:restaurant_id>/menu')
+def restaurant_menu_view(restaurant_id):
+    restaurant = _load_restaurant(restaurant_id)
+    return render_template(
+        'admin/menu.html', restaurant=restaurant,
+        dishes=dao.get_restaurant_dishes(restaurant.id), active='restaurants',
+    )
+
+
+@admin_bp.route('/restaurants/<int:restaurant_id>/approve', methods=['POST'])
+def approve_restaurant_view(restaurant_id):
+    restaurant = _load_restaurant(restaurant_id)
+    try:
+        dao.approve_restaurant(restaurant)
+        flash(f'Đã duyệt nhà hàng {restaurant.name}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('admin.restaurants_view'))
+
+
+@admin_bp.route('/restaurants/<int:restaurant_id>/lock', methods=['POST'])
+def lock_restaurant_view(restaurant_id):
+    restaurant = _load_restaurant(restaurant_id)
+    try:
+        dao.lock_restaurant(restaurant)
+        flash(f'Đã khóa nhà hàng {restaurant.name}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('admin.restaurants_view'))
+
+
+@admin_bp.route('/restaurants/<int:restaurant_id>/unlock', methods=['POST'])
+def unlock_restaurant_view(restaurant_id):
+    restaurant = _load_restaurant(restaurant_id)
+    try:
+        dao.unlock_restaurant(restaurant)
+        flash(f'Đã mở khóa nhà hàng {restaurant.name}')
+    except ValueError as e:
+        flash(str(e), 'error')
+    return redirect(url_for('admin.restaurants_view'))
+
+
