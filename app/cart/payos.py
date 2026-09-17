@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import os
 import secrets
 
@@ -17,6 +18,35 @@ PAYOS_MODE = os.getenv(
     'PAYOS_MODE',
     'live'
 ).strip().lower()
+
+
+def verify_webhook(payload, checksum_key=None):
+    """Xác thực chữ ký webhook PayOS.
+
+    Chữ ký được tính trên chuỗi JSON của trường `data` (không có
+    khoảng trắng, dấu phân tách ",", ":") bằng HMAC-SHA256 với
+    PAYOS_CHECKSUM_KEY.
+    """
+    checksum_key = checksum_key or os.environ.get('PAYOS_CHECKSUM_KEY')
+    if not checksum_key:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    signature = payload.get('signature')
+    data = payload.get('data')
+    if not signature or data is None:
+        return False
+    data_str = json.dumps(
+        data,
+        ensure_ascii=False,
+        separators=(',', ':')
+    )
+    expected = hmac.new(
+        checksum_key.encode(),
+        data_str.encode(),
+        hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, str(signature))
 
 
 def _sign_payment_request(
