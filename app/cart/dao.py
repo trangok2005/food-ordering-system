@@ -1,3 +1,6 @@
+from datetime import datetime
+import json
+
 from app import db
 
 from app.models import (
@@ -9,20 +12,18 @@ from app.models import (
     OrderStatus,
     PaymentMethod,
     PaymentStatus,
+    PaymentAttempt,
     Restaurant,
-    SystemConfig
+    RestaurantStatus,
+    SystemConfig,
+    UserDishInteraction,
 )
 
 
 class CartRestaurantConflict(ValueError):
     """Giỏ hàng đang chứa món của nhà hàng khác."""
 
-    def __init__(
-        self,
-        current_restaurant,
-        dish_id,
-        quantity
-    ):
+    def __init__(self, current_restaurant, dish_id, quantity):
         self.current_restaurant = current_restaurant
         self.dish_id = dish_id
         self.quantity = quantity
@@ -35,36 +36,20 @@ class CartRestaurantConflict(ValueError):
 
 
 def _max_quantity_per_item():
-    return SystemConfig.get(
-        'MAX_QUANTITY_PER_ITEM',
-        20,
-        cast=int
-    )
+    return SystemConfig.get('MAX_QUANTITY_PER_ITEM', 20, cast=int)
 
 
 def _max_quantity_for_dish(dish):
-    """Số lượng tối đa 1 món/đơn: ưu tiên ghi đè riêng của nhà hàng,
-    không có thì dùng mặc định hệ thống."""
+    """Ưu tiên giới hạn của nhà hàng, nếu chưa có thì dùng mặc định."""
+    restaurant = dish.restaurant if dish else None
 
-    restaurant = (
-        dish.restaurant
-        if dish
-        else None
-    )
-
-    if (
-        restaurant
-        and restaurant.max_quantity_per_item
-    ):
+    if restaurant and restaurant.max_quantity_per_item:
         return restaurant.max_quantity_per_item
 
     return _max_quantity_per_item()
 
 
-def get_cart(
-    user_id,
-    restaurant_id
-):
+def get_cart(user_id, restaurant_id):
     return (
         Cart.query
         .filter(
@@ -76,32 +61,17 @@ def get_cart(
 
 
 def get_user_carts(user_id):
-    return (
-        Cart.query
-        .filter(
-            Cart.user_id == user_id
-        )
-        .all()
-    )
+    return Cart.query.filter(Cart.user_id == user_id).all()
 
 
 def get_cart_stats(user_id):
     total_quantity = 0
     total_amount = 0
 
-    for cart in (
-        Cart.query
-        .filter(
-            Cart.user_id == user_id
-        )
-        .all()
-    ):
+    for cart in Cart.query.filter(Cart.user_id == user_id).all():
         total_amount += cart.total_amount()
 
-        total_quantity += sum(
-            item.quantity
-            for item in cart.items
-        )
+        total_quantity += sum(item.quantity for item in cart.items)
 
     return {
         'total_quantity': total_quantity,
@@ -109,41 +79,25 @@ def get_cart_stats(user_id):
     }
 
 
-def add_to_cart(
-    user_id,
-    dish_id,
-    quantity=1
-):
+def add_to_cart(user_id, dish_id, quantity=1):
     if not dish_id:
-        raise ValueError(
-            'Món ăn không hợp lệ'
-        )
+        raise ValueError('Món ăn không hợp lệ')
 
     if not quantity or quantity < 1:
-        raise ValueError(
-            'Số lượng món không hợp lệ'
-        )
+        raise ValueError('Số lượng món không hợp lệ')
 
-    dish = Dish.query.get(
-        dish_id
-    )
+    dish = Dish.query.get(dish_id)
 
-    if (
-        not dish
-        or not dish.active
-        or not dish.is_available
-    ):
-        raise ValueError(
-            'Món ăn không khả dụng'
-        )
+    if not dish or not dish.active or not dish.is_available:
+        raise ValueError('Món ăn không khả dụng')
 
     if (
         not dish.restaurant
         or not dish.restaurant.active
+        or dish.restaurant.status != RestaurantStatus.APPROVED
+        or not dish.restaurant.is_open
     ):
-        raise ValueError(
-            'Nhà hàng hiện không hoạt động'
-        )
+        raise ValueError('Nhà hàng hiện không hoạt động')
 
     other_cart = (
         Cart.query
@@ -155,16 +109,9 @@ def add_to_cart(
     )
 
     if other_cart:
-        raise CartRestaurantConflict(
-            other_cart.restaurant,
-            dish_id,
-            quantity
-        )
+        raise CartRestaurantConflict(other_cart.restaurant, dish_id, quantity)
 
-    cart = get_cart(
-        user_id,
-        dish.restaurant_id
-    )
+    cart = get_cart(user_id, dish.restaurant_id)
 
     if not cart:
         cart = Cart(
@@ -177,25 +124,13 @@ def add_to_cart(
 
     item = (
         CartItem.query
-        .filter_by(
-            cart_id=cart.id,
-            dish_id=dish.id
-        )
+        .filter_by(cart_id=cart.id, dish_id=dish.id)
         .first()
     )
 
-    new_qty = (
-        quantity
-        + (
-            item.quantity
-            if item
-            else 0
-        )
-    )
+    new_qty = quantity + (item.quantity if item else 0)
 
-    max_qty = _max_quantity_for_dish(
-        dish
-    )
+    max_qty = _max_quantity_for_dish(dish)
 
     if new_qty > max_qty:
         raise ValueError(
@@ -215,51 +150,33 @@ def add_to_cart(
                     quantity=quantity
                 )
             )
+        db.session.add(UserDishInteraction(
+            user_id=user_id, dish_id=dish.id,
+            interaction_type='ADD_TO_CART', hour_of_day=datetime.now().hour,
+        ))
 
         db.session.commit()
 
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể thêm món vào giỏ hàng'
-        )
+        raise ValueError('Không thể thêm món vào giỏ hàng')
 
     return cart
 
 
-def update_cart_item(
-    user_id,
-    cart_item_id,
-    quantity
-):
+def update_cart_item(user_id, cart_item_id, quantity):
     if not quantity or quantity < 1:
-        raise ValueError(
-            'Số lượng không hợp lệ'
-        )
+        raise ValueError('Số lượng không hợp lệ')
 
-    item = CartItem.query.get(
-        cart_item_id
-    )
+    item = CartItem.query.get(cart_item_id)
 
-    if (
-        not item
-        or item.cart.user_id != user_id
-    ):
-        raise ValueError(
-            'Sản phẩm không có trong giỏ'
-        )
+    if not item or item.cart.user_id != user_id:
+        raise ValueError('Sản phẩm không có trong giỏ')
 
-    if (
-        not item.dish
-        or not item.dish.active
-    ):
-        raise ValueError(
-            'Món ăn không còn khả dụng'
-        )
+    if not item.dish or not item.dish.active:
+        raise ValueError('Món ăn không còn khả dụng')
 
-    max_qty = _max_quantity_for_dish(
-        item.dish
-    )
+    max_qty = _max_quantity_for_dish(item.dish)
 
     if quantity > max_qty:
         raise ValueError(
@@ -273,73 +190,51 @@ def update_cart_item(
 
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể cập nhật giỏ hàng'
-        )
+        raise ValueError('Không thể cập nhật giỏ hàng')
 
     return item
 
 
-def remove_cart_item(
-    user_id,
-    cart_item_id
-):
-    item = CartItem.query.get(
-        cart_item_id
-    )
+def remove_cart_item(user_id, cart_item_id):
+    item = CartItem.query.get(cart_item_id)
 
-    if (
-        not item
-        or item.cart.user_id != user_id
-    ):
-        raise ValueError(
-            'Sản phẩm không có trong giỏ'
-        )
+    if not item or item.cart.user_id != user_id:
+        raise ValueError('Sản phẩm không có trong giỏ')
 
     try:
+        cart = item.cart
         db.session.delete(item)
+        db.session.flush()
+        if not cart.items:
+            db.session.delete(cart)
         db.session.commit()
 
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể xóa sản phẩm khỏi giỏ hàng'
-        )
+        raise ValueError('Không thể xóa sản phẩm khỏi giỏ hàng')
 
 
-def clear_cart(
-    user_id,
-    cart_id
-):
+def clear_cart(user_id, cart_id):
     cart = (
         Cart.query
-        .filter_by(
-            id=cart_id,
-            user_id=user_id
-        )
+        .filter_by(id=cart_id, user_id=user_id)
         .first()
     )
 
     if not cart:
-        raise ValueError(
-            'Giỏ hàng không tồn tại'
-        )
+        raise ValueError('Giỏ hàng không tồn tại')
 
     try:
-        cart.items.clear()
+        db.session.delete(cart)
         db.session.commit()
 
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể xóa giỏ hàng'
-        )
+        raise ValueError('Không thể xóa giỏ hàng')
 
 
 def clear_all_carts(user_id):
-    carts = get_user_carts(
-        user_id
-    )
+    carts = get_user_carts(user_id)
 
     try:
         for cart in carts:
@@ -349,21 +244,40 @@ def clear_all_carts(user_id):
 
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể xóa giỏ hàng cũ'
-        )
+        raise ValueError('Không thể xóa giỏ hàng cũ')
 
 
-def validate_checkout(
-    user_id,
-    lat=None,
-    lng=None
-):
-    """Kiểm tra các ràng buộc nghiệp vụ trước khi thanh toán."""
+def switch_restaurant_cart(user_id, dish_id, quantity=1):
+    dish = db.session.get(Dish, dish_id)
+    if (
+        not dish or not dish.active or not dish.is_available
+        or not dish.restaurant or not dish.restaurant.active
+        or dish.restaurant.status != RestaurantStatus.APPROVED
+        or not dish.restaurant.is_open
+    ):
+        raise ValueError('Món ăn hoặc nhà hàng không khả dụng')
+    max_qty = _max_quantity_for_dish(dish)
+    if not quantity or quantity < 1 or quantity > max_qty:
+        raise ValueError(f'Mỗi món chỉ được đặt từ 1 đến {max_qty} phần')
+    try:
+        for cart in get_user_carts(user_id):
+            db.session.delete(cart)
+        db.session.flush()
+        cart = Cart(user_id=user_id, restaurant_id=dish.restaurant_id)
+        db.session.add(cart)
+        db.session.flush()
+        db.session.add(CartItem(
+            cart_id=cart.id, dish_id=dish.id, quantity=quantity
+        ))
+        db.session.commit()
+        return cart
+    except Exception:
+        db.session.rollback()
+        raise ValueError('Không thể chuyển sang nhà hàng mới')
 
-    carts = get_user_carts(
-        user_id
-    )
+
+def validate_checkout(user_id, lat=None, lng=None):
+    carts = get_user_carts(user_id)
 
     issues = []
 
@@ -377,12 +291,13 @@ def validate_checkout(
         restaurant = cart.restaurant
 
         if not restaurant:
-            issues.append(
-                'Một nhà hàng trong giỏ hàng không còn tồn tại'
-            )
+            issues.append('Một nhà hàng trong giỏ hàng không còn tồn tại')
             continue
 
-        if not restaurant.active:
+        if (
+            not restaurant.active
+            or restaurant.status != RestaurantStatus.APPROVED
+        ):
             issues.append(
                 f'Nhà hàng {restaurant.name} '
                 f'hiện không hoạt động'
@@ -396,10 +311,7 @@ def validate_checkout(
             )
             continue
 
-        min_amount = (
-            restaurant.min_order_amount
-            or default_min
-        )
+        min_amount = restaurant.min_order_amount or default_min
 
         if cart.total_amount() < min_amount:
             issues.append(
@@ -411,13 +323,8 @@ def validate_checkout(
             )
 
         for item in cart.items:
-            if (
-                not item.dish
-                or not item.dish.active
-            ):
-                issues.append(
-                    'Có món ăn không còn khả dụng'
-                )
+            if not item.dish or not item.dish.active:
+                issues.append('Có món ăn không còn khả dụng')
                 continue
 
             if not item.dish.is_available:
@@ -426,9 +333,7 @@ def validate_checkout(
                     f"({restaurant.name}) đã hết hàng"
                 )
 
-            max_qty = _max_quantity_for_dish(
-                item.dish
-            )
+            max_qty = _max_quantity_for_dish(item.dish)
 
             if item.quantity > max_qty:
                 issues.append(
@@ -437,21 +342,18 @@ def validate_checkout(
                     f"{max_qty} phần"
                 )
 
-        if (
-            lat is not None
-            and lng is not None
-        ):
-            distance = restaurant.distance_km_to(
-                lat,
-                lng
-            )
+        if restaurant.latitude is not None and restaurant.longitude is not None:
+            if lat is None or lng is None:
+                issues.append(
+                    f'Vui lòng cấp quyền vị trí GPS để kiểm tra '
+                    f'bán kính giao hàng của {restaurant.name}'
+                )
+                continue
+            distance = restaurant.distance_km_to(lat, lng)
 
             if (
                 distance is not None
-                and not restaurant.is_within_delivery_radius(
-                    lat,
-                    lng
-                )
+                and not restaurant.is_within_delivery_radius(lat, lng)
             ):
                 issues.append(
                     f"Địa chỉ giao hàng cách "
@@ -463,32 +365,16 @@ def validate_checkout(
     return issues
 
 
-def build_checkout_payload(
-    user_id,
-    lat=None,
-    lng=None
-):
-    """Chuẩn bị dữ liệu thanh toán từ giỏ hàng."""
-
-    carts = get_user_carts(
-        user_id
-    )
+def build_checkout_payload(user_id, lat=None, lng=None):
+    carts = get_user_carts(user_id)
 
     if not carts:
-        raise ValueError(
-            'Giỏ hàng trống'
-        )
+        raise ValueError('Giỏ hàng trống')
 
-    issues = validate_checkout(
-        user_id,
-        lat=lat,
-        lng=lng
-    )
+    issues = validate_checkout(user_id, lat=lat, lng=lng)
 
     if issues:
-        raise ValueError(
-            ' '.join(issues)
-        )
+        raise ValueError(' '.join(issues))
 
     carts_data = []
     total = 0
@@ -499,15 +385,10 @@ def build_checkout_payload(
 
         for item in cart.items:
             if not item.dish:
-                raise ValueError(
-                    'Một món trong giỏ không còn tồn tại'
-                )
+                raise ValueError('Một món trong giỏ không còn tồn tại')
 
             unit_price = item.dish.price
-            subtotal = (
-                unit_price
-                * item.quantity
-            )
+            subtotal = unit_price * item.quantity
 
             items.append({
                 'dish_id': item.dish.id,
@@ -529,9 +410,7 @@ def build_checkout_payload(
         total += cart_total
 
     if total <= 0:
-        raise ValueError(
-            'Tổng tiền đơn hàng không hợp lệ'
-        )
+        raise ValueError('Tổng tiền đơn hàng không hợp lệ')
 
     return {
         'carts': carts_data,
@@ -542,51 +421,92 @@ def build_checkout_payload(
 def get_user_orders(user_id):
     return (
         Order.query
-        .filter(
-            Order.user_id == user_id
-        )
-        .order_by(
-            Order.created_date.desc(),
-            Order.id.desc()
-        )
+        .filter(Order.user_id == user_id)
+        .order_by(Order.created_date.desc(), Order.id.desc())
         .all()
     )
 
 
-def create_orders_from_pending(
-    user_id,
-    pending
-):
-    """Chỉ gọi hàm này sau khi payOS xác nhận thanh toán thành công.
-    Mỗi nhà hàng trong giỏ sẽ tạo thành một Order riêng.
-    Sau khi tạo Order thì xóa các giỏ hàng."""
+def save_payment_attempt(user_id, pending):
+    attempt = PaymentAttempt(
+        order_code=str(pending['order_code']),
+        payment_request_id=str(pending['payment_request_id']),
+        amount=int(pending['total']),
+        payload=json.dumps(pending, ensure_ascii=False),
+        user_id=user_id,
+    )
+    try:
+        db.session.add(attempt)
+        db.session.commit()
+        return attempt
+    except Exception:
+        db.session.rollback()
+        raise ValueError('Không thể lưu phiên thanh toán')
+
+
+def get_payment_attempt(payment_request_id, user_id=None):
+    query = PaymentAttempt.query.filter(
+        PaymentAttempt.payment_request_id == str(payment_request_id)
+    )
+    if user_id is not None:
+        query = query.filter(PaymentAttempt.user_id == user_id)
+    return query.first()
+
+
+def get_payment_attempt_by_order_code(order_code):
+    return PaymentAttempt.query.filter(
+        PaymentAttempt.order_code == str(order_code)
+    ).first()
+
+
+def finalize_payment_attempt(payment_request_id, user_id=None):
+    query = PaymentAttempt.query.filter(
+        PaymentAttempt.payment_request_id == str(payment_request_id)
+    )
+    if user_id is not None:
+        query = query.filter(PaymentAttempt.user_id == user_id)
+    attempt = query.with_for_update().first()
+    if not attempt:
+        raise ValueError('Phiên thanh toán không tồn tại')
+    if attempt.status == 'PROCESSED':
+        ids = [
+            int(value)
+            for value in (attempt.result_order_ids or '').split(',') if value
+        ]
+        return Order.query.filter(Order.id.in_(ids)).order_by(Order.id).all()
+    pending = json.loads(attempt.payload)
+    if int(pending.get('total', 0)) != attempt.amount:
+        raise ValueError('Số tiền thanh toán không khớp')
+    return create_orders_from_pending(
+        attempt.user_id, pending, payment_attempt=attempt
+    )
+
+
+def create_orders_from_pending(user_id, pending, payment_attempt=None):
+    """Chỉ tạo đơn sau khi payOS xác nhận thanh toán thành công."""
 
     from datetime import datetime
 
     if not pending:
-        raise ValueError(
-            'Thông tin thanh toán không tồn tại'
-        )
+        raise ValueError('Thông tin thanh toán không tồn tại')
 
     if not pending.get('carts'):
-        raise ValueError(
-            'Không có dữ liệu giỏ hàng để tạo đơn'
-        )
+        raise ValueError('Không có dữ liệu giỏ hàng để tạo đơn')
 
     orders = []
 
     try:
         for c in pending['carts']:
-            restaurant = Restaurant.query.get(
-                c['restaurant_id']
-            )
+            restaurant = Restaurant.query.get(c['restaurant_id'])
 
             if not restaurant:
-                raise ValueError(
-                    'Nhà hàng không còn tồn tại'
-                )
+                raise ValueError('Nhà hàng không còn tồn tại')
 
-            if not restaurant.active:
+            if (
+                not restaurant.active
+                or restaurant.status != RestaurantStatus.APPROVED
+                or not restaurant.is_open
+            ):
                 raise ValueError(
                     f'Nhà hàng {restaurant.name} '
                     f'hiện không hoạt động'
@@ -595,23 +515,11 @@ def create_orders_from_pending(
             order = Order(
                 user_id=user_id,
                 restaurant_id=restaurant.id,
-                delivery_address=pending.get(
-                    'address',
-                    ''
-                ),
-                delivery_latitude=pending.get(
-                    'lat'
-                ),
-                delivery_longitude=pending.get(
-                    'lng'
-                ),
-                phone=pending.get(
-                    'phone',
-                    ''
-                ),
-                note=pending.get(
-                    'note'
-                ),
+                delivery_address=pending.get('address', ''),
+                delivery_latitude=pending.get('lat'),
+                delivery_longitude=pending.get('lng'),
+                phone=pending.get('phone', ''),
+                note=pending.get('note'),
                 total_amount=c['total'],
                 status=OrderStatus.PENDING,
                 payment_method=PaymentMethod.ONLINE,
@@ -619,18 +527,14 @@ def create_orders_from_pending(
                 paid_at=datetime.now(),
             )
 
-            db.session.add(
-                order
-            )
+            db.session.add(order)
 
             db.session.flush()
 
             order.set_confirm_deadline()
 
             for item in c['items']:
-                dish = Dish.query.get(
-                    item['dish_id']
-                )
+                dish = Dish.query.get(item['dish_id'])
 
                 if not dish:
                     raise ValueError(
@@ -646,43 +550,36 @@ def create_orders_from_pending(
                         unit_price=item['unit_price']
                     )
                 )
+                db.session.add(UserDishInteraction(
+                    user_id=user_id, dish_id=item['dish_id'],
+                    interaction_type='ORDER', hour_of_day=datetime.now().hour,
+                ))
 
-            orders.append(
-                order
+            orders.append(order)
+
+        restaurant_ids = [c['restaurant_id'] for c in pending['carts']]
+        for cart in (
+            Cart.query
+            .filter(
+                Cart.user_id == user_id,
+                Cart.restaurant_id.in_(restaurant_ids)
             )
-
+            .all()
+        ):
+            db.session.delete(cart)
+        if payment_attempt:
+            payment_attempt.status = 'PROCESSED'
+            payment_attempt.processed_at = datetime.now()
+            payment_attempt.result_order_ids = ','.join(
+                str(order.id) for order in orders
+            )
         db.session.commit()
 
     except ValueError:
         db.session.rollback()
         raise
-
     except Exception:
         db.session.rollback()
-        raise ValueError(
-            'Không thể tạo đơn hàng'
-        )
-
-    try:
-        for cart in (
-            Cart.query
-            .filter(
-                Cart.user_id == user_id
-            )
-            .all()
-        ):
-            db.session.delete(cart)
-
-        db.session.commit()
-
-    except Exception:
-        db.session.rollback()
-
-        # Không xóa Order đã tạo.
-        # Chỉ thông báo lỗi để tránh làm mất đơn đã thanh toán.
-        raise ValueError(
-            'Đơn hàng đã được tạo nhưng không thể '
-            'xóa giỏ hàng. Vui lòng kiểm tra lại giỏ hàng.'
-        )
+        raise ValueError('Không thể tạo đơn hàng')
 
     return orders
