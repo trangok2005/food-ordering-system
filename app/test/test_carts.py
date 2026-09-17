@@ -162,7 +162,7 @@ def test_remove_cart_item_success(app):
     item = cart_dao.get_user_carts(customer.id)[0].items[0]
     cart_dao.remove_cart_item(customer.id, item.id)
 
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_remove_cart_item_not_in_cart(app):
@@ -183,7 +183,7 @@ def test_clear_cart(app):
     cart_id = cart_dao.get_user_carts(customer.id)[0].id
     cart_dao.clear_cart(customer.id, cart_id)
 
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_cart_stats(app):
@@ -257,7 +257,7 @@ def test_remove_cart_route(client, app):
     item = cart_dao.get_user_carts(customer.id)[0].items[0]
     res = client.post('/cart/remove', data={'item_id': item.id})
     assert res.status_code == 302
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_clear_cart_route(client, app):
@@ -270,7 +270,7 @@ def test_clear_cart_route(client, app):
     cart_id = cart_dao.get_user_carts(customer.id)[0].id
     res = client.post('/cart/clear', data={'cart_id': cart_id})
     assert res.status_code == 302
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_cart_stats_api(client, app):
