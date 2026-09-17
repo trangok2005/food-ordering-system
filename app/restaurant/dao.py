@@ -8,10 +8,62 @@ from app.models import (
     Dish,
     Order,
     OrderStatus,
+    PaymentStatus,
     Restaurant,
     RestaurantStatus,
     SystemConfig,
+    User,
+    UserRole,
+
 )
+SystemConfigModel = SystemConfig
+def get_dashboard_stats():
+    restaurant_count = Restaurant.query.count()
+
+    restaurant_by_status = dict(
+        db.session.query(Restaurant.status, func.count(Restaurant.id))
+        .group_by(Restaurant.status)
+        .all()
+    )
+
+    user_count = (
+        User.query
+        .filter(User.role.in_([UserRole.CUSTOMER, UserRole.USER]))
+        .count()
+    )
+    owner_count = (
+        User.query
+        .filter(User.role == UserRole.RESTAURANT)
+        .count()
+    )
+
+    order_count = Order.query.count()
+
+    paid_count = (
+        Order.query
+        .filter(Order.payment_status == PaymentStatus.PAID)
+        .count()
+    )
+    revenue = (
+        db.session
+        .query(func.coalesce(func.sum(Order.total_amount), 0))
+        .filter(Order.status.in_([
+            OrderStatus.COMPLETED, OrderStatus.DELIVERING
+        ]))
+        .scalar()
+    )
+    avg_order = round(revenue / paid_count) if paid_count else 0
+
+    return {
+        'restaurant_count': restaurant_count,
+        'restaurant_by_status': restaurant_by_status,
+        'user_count': user_count,
+        'owner_count': owner_count,
+        'order_count': order_count,
+        'paid_count': paid_count,
+        'revenue': revenue,
+        'avg_order': avg_order,
+    }
 
 NEXT_STATUS = {
     OrderStatus.CONFIRMED: OrderStatus.PREPARING,

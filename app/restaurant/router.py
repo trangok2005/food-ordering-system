@@ -1,9 +1,9 @@
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.models import OrderStatus, PaymentStatus, UserRole
+from app.models import OrderStatus, PaymentStatus,RestaurantStatus, UserRole
 from app.restaurant import restaurant_bp, dao
-
+from app.admin import admin_bp
 
 def get_restaurant():
     if not current_user.is_authenticated:
@@ -264,3 +264,45 @@ def cancel_order(order_id):
         flash(str(e), 'error')
 
     return redirect(url_for('restaurant.orders_view'))
+@admin_bp.before_request
+@login_required
+def _require_admin():
+    if current_user.role.name != 'ADMIN':
+        abort(403)
+
+
+def _status_from_name(name):
+    if not name:
+        return None
+    for member in RestaurantStatus:
+        if member.name == name:
+            return member
+    return None
+
+
+def _order_status_from_name(name):
+    if not name:
+        return None
+    return next((status for status in OrderStatus if status.name == name), None)
+
+
+def _load_restaurant(restaurant_id):
+    restaurant = dao.get_restaurant(restaurant_id)
+    if not restaurant:
+        abort(404)
+    return restaurant
+
+
+@admin_bp.route('/')
+def dashboard():
+    stats = dao.get_dashboard_stats()
+    pending = dao.get_pending_restaurants()
+    recent_orders = dao.get_recent_orders()
+    return render_template(
+        'admin/index.html',
+        stats=stats,
+        pending=pending,
+        recent_orders=recent_orders,
+        active='dashboard',
+    )
+
