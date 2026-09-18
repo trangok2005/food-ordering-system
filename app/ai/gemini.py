@@ -35,7 +35,7 @@ def analyze_sentiment(comment):
     )
 
     response = client.models.generate_content(
-        model=os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip()
+        model=os.getenv('GEMINI_MODEL', 'gemini-3.6-flash').strip(),
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type='application/json',
