@@ -1,5 +1,5 @@
 from flask import Blueprint
-from app import login
+from app.extensions import login
 
 
 auth_bp = Blueprint('auth',__name__,url_prefix='/auth')

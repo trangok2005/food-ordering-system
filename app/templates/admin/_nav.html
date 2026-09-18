@@ -1,4 +1,9 @@
-<ul class="nav nav-tabs mb-4 flex-wrap">
+<nav aria-label="Quản trị hệ thống">
+<ul class="nav nav-tabs mb-4 flex-nowrap">
+  <li class="nav-item">
+    <a class="nav-link {{ 'active' if active == 'orders' }}"
+       href="{{ url_for('admin.orders_view') }}">Đơn hàng</a>
+  </li>
   <li class="nav-item">
     <a class="nav-link {{ 'active' if active == 'dashboard' }}"
        href="{{ url_for('admin.dashboard') }}">Tổng quan</a>
@@ -20,3 +25,4 @@
        href="{{ url_for('admin.config_view') }}">Cấu hình</a>
   </li>
 </ul>
+</nav>

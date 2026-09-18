@@ -1,17 +1,8 @@
 {% extends 'layout/base.html' %}
+{% from 'components/_status.html' import order_status %}
 {% block title %}Quản Lý Đơn Hàng | {{ restaurant.name }}{% endblock %}
 
 {% block content %}
-{% set status_map = {
-  'PENDING':    ('Chờ xác nhận',  'warning text-dark'),
-  'CONFIRMED':  ('Đã xác nhận',   'info'),
-  'PREPARING':  ('Đang chuẩn bị', 'info'),
-  'DELIVERING': ('Đang giao',     'primary'),
-  'COMPLETED':  ('Hoàn thành',    'success'),
-  'CANCELLED':  ('Đã hủy',        'secondary'),
-  'EXPIRED':    ('Quá hạn xác nhận', 'dark'),
-} %}
-
 <section class="restaurant-hero">
   <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
   <p class="restaurant-hero-desc">Quản lý và xử lý đơn hàng</p>
@@ -34,7 +25,7 @@
   <li class="nav-item">
     <a class="nav-link {{ 'active' if current_status == member }}"
        href="{{ url_for('restaurant.orders_view', status=member.name) }}">
-      {{ status_map[member.name][0] }}
+      {{ member.value }}
       <span class="badge bg-light text-dark">{{ counts.get(member, 0) }}</span>
     </a>
   </li>
@@ -43,7 +34,6 @@
 
 {% if orders %}
 {% for order in orders %}
-{% set label, badge = status_map.get(order.status.name, (order.status.name, 'secondary')) %}
 <div class="cart-card mb-3" id="order-{{ order.id }}">
   <div class="cart-card-header flex-wrap">
     <div>
@@ -56,7 +46,7 @@
         {% endif %}
       </small>
     </div>
-    <span class="badge bg-{{ badge }}">&#9679; {{ label }}</span>
+      {{ order_status(order.status.name) }}
   </div>
 
   <div class="table-responsive">
@@ -74,9 +64,9 @@
   </div>
 
   <div class="order-meta px-3 py-2 text-muted small">
-    <div>&#128205; {{ order.delivery_address }}</div>
-    <div>&#128222; {{ order.phone }}</div>
-    {% if order.note %}<div>&#128221; {{ order.note }}</div>{% endif %}
+    <div><strong>Giao đến:</strong> {{ order.delivery_address }}</div>
+    <div><strong>Điện thoại:</strong> {{ order.phone }}</div>
+    {% if order.note %}<div><strong>Ghi chú:</strong> {{ order.note }}</div>{% endif %}
     <div>
       Thanh toán: {{ order.payment_status.value }}
       {% if order.paid_at %}&middot; lúc {{ order.paid_at.strftime('%H:%M %d/%m/%Y') }}{% endif %}
@@ -90,6 +80,7 @@
     <div class="d-flex flex-wrap gap-2">
       {% if order.status.name == 'PENDING' %}
       <form method="post" action="{{ url_for('restaurant.confirm_order', order_id=order.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-success btn-sm" type="submit">Xác nhận đơn</button>
       </form>
       <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
@@ -97,6 +88,7 @@
 
       {% elif order.status.name == 'CONFIRMED' %}
       <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-info btn-sm" type="submit">Bắt đầu chuẩn bị</button>
       </form>
       <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
@@ -104,6 +96,7 @@
 
       {% elif order.status.name == 'PREPARING' %}
       <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-primary btn-sm" type="submit">Giao hàng</button>
       </form>
       <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
@@ -111,16 +104,12 @@
 
       {% elif order.status.name == 'DELIVERING' %}
       <form method="post" action="{{ url_for('restaurant.advance_order', order_id=order.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <button class="btn btn-success btn-sm" type="submit">Hoàn thành</button>
       </form>
       <button class="btn btn-outline-danger btn-sm" data-bs-toggle="modal"
               data-bs-target="#cancelModal-{{ order.id }}">Hủy đơn</button>
 
-      {% elif order.status.name == 'CANCELLED' and order.payment_status != PaymentStatus.REFUNDED %}
-      <form method="post" action="{{ url_for('restaurant.mark_refunded', order_id=order.id) }}"
-            onsubmit="return confirm('Xác nhận bạn đã tự hoàn tiền cho khách NGOÀI hệ thống?')">
-        <button class="btn btn-outline-warning btn-sm" type="submit">Đánh dấu đã hoàn tiền</button>
-      </form>
       {% endif %}
     </div>
     <div class="d-flex align-items-center gap-2">
@@ -134,9 +123,10 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <form method="post" action="{{ url_for('restaurant.cancel_order', order_id=order.id) }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="modal-header">
           <h5 class="modal-title">Hủy đơn #{{ order.id }}</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
         </div>
         <div class="modal-body">
           <p class="small text-muted mb-3">
@@ -160,5 +150,14 @@
 <div class="empty-state">
   <p>{% if current_status %}Không có đơn ở trạng thái này.{% else %}Chưa có đơn hàng nào.{% endif %}</p>
 </div>
+{% endif %}
+{% if pagination.pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Phân trang đơn hàng">
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_prev }}"
+     href="{{ url_for('restaurant.orders_view', status=current_status.name if current_status else None, page=pagination.prev_num) if pagination.has_prev else '#' }}">Trang trước</a>
+  <span class="text-muted small">Trang {{ pagination.page }}/{{ pagination.pages }}</span>
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_next }}"
+     href="{{ url_for('restaurant.orders_view', status=current_status.name if current_status else None, page=pagination.next_num) if pagination.has_next else '#' }}">Trang sau</a>
+</nav>
 {% endif %}
 {% endblock %}

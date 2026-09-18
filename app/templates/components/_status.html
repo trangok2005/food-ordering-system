@@ -1,0 +1,13 @@
+{% macro order_status(status_name) %}
+  {% set statuses = {
+    'PENDING': ('Chờ xác nhận', 'pending'),
+    'CONFIRMED': ('Đã xác nhận', 'confirmed'),
+    'PREPARING': ('Đang chuẩn bị', 'preparing'),
+    'DELIVERING': ('Đang giao', 'delivering'),
+    'COMPLETED': ('Hoàn thành', 'completed'),
+    'CANCELLED': ('Đã hủy', 'cancelled'),
+    'EXPIRED': ('Quá hạn xác nhận', 'expired')
+  } %}
+  {% set label, class_name = statuses.get(status_name, (status_name, 'cancelled')) %}
+  <span class="status-badge status-{{ class_name }}">{{ label }}</span>
+{% endmacro %}

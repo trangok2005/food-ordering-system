@@ -56,7 +56,6 @@ def _login(client, username='kh1'):
     return login(client, username)
 
 
-# /ai/reviews (đăng nhập)
 def test_my_reviews_requires_login(app):
     client = app.test_client()
     res = client.get('/ai/reviews')
@@ -70,7 +69,6 @@ def test_my_reviews_empty(app):
     assert res.status_code == 200
 
 
-# POST /ai/reviews/add
 def test_add_review_requires_login(app):
     client = app.test_client()
     res = client.post('/ai/reviews/add', data={
@@ -82,10 +80,12 @@ def test_add_review_requires_login(app):
     assert res.status_code == 302
 
 
-def test_add_review_success(app):
+def test_add_review_success(app, monkeypatch):
     from app.ai import gemini
-    gemini.is_configured = lambda: True
-    gemini.analyze_sentiment = lambda comment: ('POSITIVE', 0.9)
+    monkeypatch.setattr(gemini, 'is_configured', lambda: True)
+    monkeypatch.setattr(
+        gemini, 'analyze_sentiment', lambda comment: ('POSITIVE', 0.9)
+    )
 
     client = app.test_client()
     _login(client)
@@ -123,6 +123,48 @@ def test_add_review_duplicate_rejected(app):
     assert res.status_code == 302
 
     with app.app_context():
+        assert Review.query.count() == 1
+
+
+def test_duplicate_review_is_rejected_before_gemini(app, monkeypatch):
+    from app.ai import dao as ai_dao
+    from app.ai import gemini
+
+    with app.app_context():
+        ai_dao.add_review(app.user.id, app.order, app.dish.id, 5, 'Ngon', None)
+
+    called = False
+
+    def analyze(_comment):
+        nonlocal called
+        called = True
+        return 'POSITIVE', 1.0
+
+    monkeypatch.setattr(gemini, 'is_configured', lambda: True)
+    monkeypatch.setattr(gemini, 'analyze_sentiment', analyze)
+    client = app.test_client()
+    _login(client)
+    client.post('/ai/reviews/add', data={
+        'order_id': app.order.id,
+        'dish_id': app.dish.id,
+        'rating': 5,
+        'comment': 'Ngon',
+    })
+    assert called is False
+
+
+def test_add_review_handles_unique_constraint_race(app, monkeypatch):
+    from app.ai import dao as ai_dao
+
+    with app.app_context():
+        ai_dao.add_review(app.user.id, app.order, app.dish.id, 5, 'Ngon', None)
+        monkeypatch.setattr(ai_dao, 'get_review_for_order_dish',
+                            lambda order, dish_id: None)
+
+        with pytest.raises(ValueError, match='đã đánh giá'):
+            ai_dao.add_review(
+                app.user.id, app.order, app.dish.id, 4, 'Vẫn ngon', None
+            )
         assert Review.query.count() == 1
 
 
@@ -196,7 +238,6 @@ def test_add_review_other_users_order(app):
         'dish_id': app.dish.id,
         'rating': 5,
     })
-    # order thuộc user khác -> 404
     assert res.status_code == 404
 
     with app.app_context():
@@ -208,8 +249,13 @@ def test_add_review_dish_not_in_order(app):
     _login(client)
 
     with app.app_context():
+        owner2 = User(username='owner2', email='owner2@test.com',
+                      role=UserRole.RESTAURANT)
+        owner2.set_password('123456')
+        db.session.add(owner2)
+        db.session.flush()
         rest2 = Restaurant(name='Nhà hàng B', address='Q1',
-                           status=RestaurantStatus.APPROVED, owner_id=app.user.id)
+                           status=RestaurantStatus.APPROVED, owner_id=owner2.id)
         db.session.add(rest2)
         db.session.flush()
         cat2 = Category(name='Tráng miệng', restaurant_id=rest2.id)
@@ -232,7 +278,6 @@ def test_add_review_dish_not_in_order(app):
         assert Review.query.count() == 0
 
 
-# bỏ qua khi order chưa hoàn thành
 def test_add_review_non_completed_order(app):
     client = app.test_client()
     _login(client)
@@ -260,7 +305,6 @@ def test_add_review_non_completed_order(app):
         assert Review.query.count() == 0
 
 
-# dao
 def test_dish_rating_stats(app):
     with app.app_context():
         from app.ai import dao as ai_dao

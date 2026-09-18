@@ -2,43 +2,46 @@
 {% block title %}Hồ sơ cá nhân | Food Ordering System{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<section class="py-5">
+  <div class="section-header">
+    <div><span class="page-eyebrow">Tài khoản</span><h1 class="section-title">Hồ sơ cá nhân</h1></div>
+  </div>
   <div class="row g-4">
-    <!-- Hồ sơ -->
     <div class="col-lg-7">
       <div class="card shadow-sm h-100">
-        <div class="card-header bg-white fw-bold">Hồ sơ cá nhân</div>
+        <div class="cart-card-header"><h2 class="cart-restaurant">Thông tin cá nhân</h2></div>
         <div class="card-body">
           <form method="post" action="{{ url_for('auth.profile_view') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="update_profile" />
             <div class="row">
               <div class="col-md-6 mb-3">
-                <label class="form-label">Tên đăng nhập</label>
-                <input type="text" class="form-control" value="{{ current_user.username }}" disabled />
+                <label class="form-label" for="profile-username">Tên đăng nhập</label>
+                <input id="profile-username" type="text" class="form-control" value="{{ current_user.username }}" disabled />
               </div>
               <div class="col-md-6 mb-3">
-                <label class="form-label">Email</label>
-                <input type="email" class="form-control" value="{{ current_user.email }}" disabled />
+                <label class="form-label" for="profile-email">Email</label>
+                <input id="profile-email" type="email" class="form-control" value="{{ current_user.email }}" disabled />
               </div>
             </div>
             <div class="mb-3">
-              <label class="form-label">Họ và tên</label>
-              <input type="text" name="full_name" class="form-control" maxlength="100"
+              <label class="form-label" for="profile-full-name">Họ và tên</label>
+              <input id="profile-full-name" type="text" name="full_name" class="form-control" maxlength="100" autocomplete="name"
                      value="{{ current_user.full_name or '' }}" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Số điện thoại</label>
-              <input type="tel" name="phone" class="form-control" maxlength="11"
+              <label class="form-label" for="profile-phone">Số điện thoại</label>
+              <input id="profile-phone" type="tel" name="phone" class="form-control" maxlength="11" inputmode="numeric" pattern="[0-9]{10,11}" autocomplete="tel"
                      placeholder="10-11 ký số" value="{{ current_user.phone or '' }}" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Địa chỉ</label>
-              <input type="text" name="address" class="form-control" maxlength="255"
+              <label class="form-label" for="profile-address">Địa chỉ</label>
+              <input id="profile-address" type="text" name="address" class="form-control" maxlength="255" autocomplete="street-address"
                      value="{{ current_user.address or '' }}" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Ảnh đại diện (link)</label>
-              <input type="url" name="avatar" class="form-control" placeholder="https://..."
+              <label class="form-label" for="profile-avatar">Ảnh đại diện (link)</label>
+              <input id="profile-avatar" type="url" name="avatar" class="form-control" placeholder="https://..." autocomplete="url"
                      value="{{ current_user.avatar or '' }}" />
             </div>
             <button type="submit" class="btn btn-primary">Lưu hồ sơ</button>
@@ -47,10 +50,9 @@
       </div>
     </div>
 
-    <!-- Đổi mật khẩu -->
     <div class="col-lg-5">
       <div class="card shadow-sm">
-        <div class="card-header bg-white fw-bold">Đổi mật khẩu</div>
+        <div class="cart-card-header"><h2 class="cart-restaurant">Đổi mật khẩu</h2></div>
         <div class="card-body">
           {% if not current_user.password %}
           <div class="alert alert-info small">
@@ -60,18 +62,19 @@
           </div>
           {% else %}
           <form method="post" action="{{ url_for('auth.profile_view') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="action" value="change_password" />
             <div class="mb-3">
-              <label class="form-label">Mật khẩu hiện tại</label>
-              <input type="password" name="current_password" class="form-control" required />
+              <label class="form-label" for="current-password">Mật khẩu hiện tại</label>
+              <input id="current-password" type="password" name="current_password" class="form-control" autocomplete="current-password" required />
             </div>
             <div class="mb-3">
-              <label class="form-label">Mật khẩu mới</label>
-              <input type="password" name="new_password" class="form-control" required minlength="6" />
+              <label class="form-label" for="new-password">Mật khẩu mới</label>
+              <input id="new-password" type="password" name="new_password" class="form-control" autocomplete="new-password" required minlength="6" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Nhập lại mật khẩu mới</label>
-              <input type="password" name="confirm_password" class="form-control" required minlength="6" />
+              <label class="form-label" for="confirm-password">Nhập lại mật khẩu mới</label>
+              <input id="confirm-password" type="password" name="confirm_password" class="form-control" autocomplete="new-password" required minlength="6" />
             </div>
             <button type="submit" class="btn btn-warning">Đổi mật khẩu</button>
           </form>
@@ -90,5 +93,5 @@
       {% endif %}
     </div>
   </div>
-</div>
+</section>
 {% endblock %}

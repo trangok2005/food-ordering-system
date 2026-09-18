@@ -1,9 +1,11 @@
 {% extends 'layout/base.html' %}
+{% from 'components/_status.html' import order_status %}
 {% block title %}Tổng Quan Quản Trị | Food Ordering System{% endblock %}
 
 {% block content %}
 <section class="restaurant-hero">
-  <h2 class="restaurant-hero-name">Trang Quản Trị</h2>
+  <span class="hero-eyebrow">Không gian quản trị</span>
+  <h1 class="restaurant-hero-name">Tổng quan hệ thống</h1>
   <p class="restaurant-hero-desc">Tổng quan hệ thống đặt món</p>
   <p class="restaurant-address">&#128100; {{ current_user.full_name or current_user.username }}</p>
 </section>
@@ -61,6 +63,7 @@
               <td>{{ restaurant.phone or 'Chưa có SĐT' }}</td>
               <td class="text-end">
                 <form method="post" action="{{ url_for('admin.approve_restaurant_view', restaurant_id=restaurant.id) }}">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                   <button class="btn btn-success btn-sm" type="submit">Duyệt</button>
                 </form>
               </td>
@@ -93,9 +96,7 @@
               </td>
               <td class="text-end">{{ order.total_amount|vnd }}</td>
               <td class="text-end">
-                <span class="badge bg-{{ {'PENDING': 'warning text-dark', 'COMPLETED': 'success', 'CANCELLED': 'secondary', 'EXPIRED': 'dark'}.get(order.status.name, 'info') }}">
-                  {{ order.status.value }}
-                </span>
+                {{ order_status(order.status.name) }}
               </td>
             </tr>
             {% endfor %}

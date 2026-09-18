@@ -68,7 +68,6 @@ def verify_webhook(payload):
 
 
 class PayOSClient:
-    """Gọi payOS Merchant API thật."""
 
     def __init__(
         self,
@@ -145,7 +144,7 @@ class PayOSClient:
         return_url,
         cancel_url
     ):
-        """Tạo link thanh toán với reference là mã đơn hàng duy nhất."""
+        """Dùng mã đơn làm reference."""
         try:
             order_code = int(reference)
             amount = int(amount)
@@ -193,7 +192,6 @@ class PayOSClient:
 
 
 class MockPayOSClient:
-    """Giả lập thanh toán payOS khi demo trên localhost."""
 
     payments = {}
 

@@ -1,0 +1,42 @@
+{% extends 'layout/base.html' %}
+{% from 'components/_status.html' import order_status %}
+{% block title %}Giám sát đơn hàng | Food Ordering System{% endblock %}
+{% block content %}
+<section class="restaurant-hero">
+  <span class="hero-eyebrow">Vận hành</span>
+  <h1 class="restaurant-hero-name">Giám sát đơn hàng</h1>
+  <p class="restaurant-hero-desc">Theo dõi đơn hàng toàn hệ thống theo trạng thái.</p>
+</section>
+{% include 'admin/_nav.html' %}
+<div class="d-flex gap-2 flex-wrap mb-3">
+  <a class="btn btn-sm {{ 'btn-primary' if not current_status else 'btn-outline-primary' }}"
+     href="{{ url_for('admin.orders_view') }}">Tất cả</a>
+  {% for status in statuses %}
+  <a class="btn btn-sm {{ 'btn-primary' if current_status == status else 'btn-outline-primary' }}"
+     href="{{ url_for('admin.orders_view', status=status.name) }}">{{ status.value }}</a>
+  {% endfor %}
+</div>
+{% if orders %}
+<div class="admin-table-wrap table-responsive"><table class="table table-hover align-middle admin-table">
+  <thead><tr><th>Mã</th><th>Khách hàng</th><th>Nhà hàng</th><th>Thời gian</th><th>Thanh toán</th><th>Trạng thái</th><th class="text-end">Tổng tiền</th></tr></thead>
+  <tbody>{% for order in orders %}<tr>
+    <td>#{{ order.id }}</td>
+    <td>{{ order.user.full_name or order.user.username }}</td>
+    <td>{{ order.restaurant.name }}</td>
+    <td>{{ order.created_date.strftime('%H:%M %d/%m/%Y') }}</td>
+    <td>{{ order.payment_status.value }}</td>
+    <td>{{ order_status(order.status.name) }}</td>
+    <td class="text-end">{{ order.total_amount|vnd }}</td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty-state"><p>Không có đơn hàng phù hợp.</p></div>{% endif %}
+{% if pagination.pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Phân trang đơn hàng">
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_prev }}"
+     href="{{ url_for('admin.orders_view', status=current_status.name if current_status else None, page=pagination.prev_num) if pagination.has_prev else '#' }}">Trang trước</a>
+  <span class="text-muted small">Trang {{ pagination.page }}/{{ pagination.pages }}</span>
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_next }}"
+     href="{{ url_for('admin.orders_view', status=current_status.name if current_status else None, page=pagination.next_num) if pagination.has_next else '#' }}">Trang sau</a>
+</nav>
+{% endif %}
+{% endblock %}

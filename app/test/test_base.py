@@ -1,65 +1,43 @@
 import pytest
 from datetime import datetime
+import secrets
 
-from flask import Flask
-from flask_login import LoginManager, current_user
+from flask.testing import FlaskClient
 
-from app import db
+from app import create_app
+from app.extensions import db
 from app.models import (User, UserRole, Restaurant, RestaurantStatus,
                         Category, Dish, Order, OrderStatus,
                         PaymentMethod, PaymentStatus)
 
 
+class CsrfTestClient(FlaskClient):
+    """Tự chèn CSRF vào POST trong test."""
+
+    def open(self, *args, **kwargs):
+        method = str(kwargs.get('method', '')).upper()
+        if method == 'POST' and kwargs.get('json') is None:
+            with self.session_transaction() as test_session:
+                token = test_session.setdefault('_csrf_token', secrets.token_urlsafe(32))
+            data = kwargs.get('data')
+            if data is None:
+                data = {}
+            if hasattr(data, 'copy') and hasattr(data, 'setdefault'):
+                data = data.copy()
+                data.setdefault('_csrf_token', token)
+                kwargs['data'] = data
+        return super().open(*args, **kwargs)
+
+
 def make_app():
-    app = Flask(__name__, template_folder='../templates', static_folder='../static')
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    app.secret_key = 'test'
-
-    db.init_app(app)
-    login = LoginManager()
-    login.init_app(app)
-    login.login_view = 'auth.login_view'
-
-    @login.user_loader
-    def load_user(user_id):
-        from app.auth import dao as auth_dao
-        return auth_dao.get_user_by_id(user_id)
-
-    from app.auth import auth_bp
-    app.register_blueprint(auth_bp)
-    from app.browse import browse_bp
-    app.register_blueprint(browse_bp)
-    from app.cart import cart_bp
-    app.register_blueprint(cart_bp)
-    from app.restaurant import restaurant_bp
-    app.register_blueprint(restaurant_bp)
-    from app.admin import admin_bp
-    app.register_blueprint(admin_bp)
-    from app.ai import ai_bp
-    app.register_blueprint(ai_bp)
-
-    from app import index
-    index.register_routers(app)
-
-    @app.context_processor
-    def inject_common():
-        from app.models import Category
-        from app.cart import dao as cart_dao
-        try:
-            categories = Category.query.all()
-        except Exception:
-            categories = []
-        try:
-            if current_user.is_authenticated:
-                cart_stats = cart_dao.get_cart_stats(current_user.id)
-            else:
-                cart_stats = {'total_quantity': 0, 'total_amount': 0}
-        except Exception:
-            cart_stats = {'total_quantity': 0, 'total_amount': 0}
-        return {'categories': categories, 'cart_stats': cart_stats}
-
-    return app
+    application = create_app({
+        'TESTING': True,
+        'SECRET_KEY': 'test-secret-key',
+        'APP_BASE_URL': 'http://localhost',
+        'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+    })
+    application.test_client_class = CsrfTestClient
+    return application
 
 
 @pytest.fixture
@@ -81,8 +59,6 @@ def client(app):
 def test_session(app):
     yield db.session
 
-
-# ---------------- HÀM TẠO DỮ LIỆU DÙNG CHUNG ----------------
 
 def make_user(username, role=UserRole.CUSTOMER, password='123456', **kwargs):
     email = kwargs.pop('email', None) or f'{username}@test.vn'
@@ -117,7 +93,6 @@ def make_restaurant(owner, status=RestaurantStatus.APPROVED, name=None, **kwargs
 
 
 def make_owner_and_restaurant(prefix=''):
-    """Tạo luôn chủ + nhà hàng, trả về (owner, restaurant)."""
     owner = make_restaurant_owner(prefix)
     return owner, make_restaurant(owner)
 

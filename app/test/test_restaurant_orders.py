@@ -9,7 +9,6 @@ from app.test.test_base import (app, client,
                                 make_order, make_dish, login)
 
 
-# ---------------- DAO ----------------
 
 def test_get_restaurant_for_owner(app):
     owner, restaurant = make_owner_and_restaurant()
@@ -135,29 +134,22 @@ def test_cancel_order_completed_fail(app):
         dao.cancel_order(order, 'ly do')
 
 
-def test_mark_refunded_success(app):
+def test_cancel_order_rejects_stale_state(app):
     _, restaurant = make_owner_and_restaurant()
     customer = make_customer()
     order = make_order(restaurant, customer)
     db.session.commit()
-    dao.cancel_order(order, 'ly do')
-
-    dao.mark_refunded(order)
-
-    assert order.payment_status == PaymentStatus.REFUNDED
-
-
-def test_mark_refunded_non_cancelled_fail(app):
-    _, restaurant = make_owner_and_restaurant()
-    customer = make_customer()
-    order = make_order(restaurant, customer)
+    db.session.query(type(order)).filter_by(id=order.id).update(
+        {'status': OrderStatus.COMPLETED}, synchronize_session=False)
     db.session.commit()
+    order.__dict__['status'] = OrderStatus.PENDING
 
     with pytest.raises(ValueError):
-        dao.mark_refunded(order)
+        dao.cancel_order(order, 'Het nguyen lieu')
+    db.session.refresh(order)
+    assert order.status == OrderStatus.COMPLETED
 
 
-# ---------------- ROUTER ----------------
 
 def test_orders_view_requireslogin(client, app):
     res = client.get('/restaurant/orders')
@@ -251,7 +243,11 @@ def test_restaurant_cannot_touch_other_orders(client, app):
     other_owner.set_password('123456')
     db.session.add(other_owner)
     db.session.flush()
-    db.session.add(Restaurant(name='Other', address='ABC', owner_id=other_owner.id))
+    from app.models import RestaurantStatus
+    db.session.add(Restaurant(
+        name='Other', address='ABC', owner_id=other_owner.id,
+        status=RestaurantStatus.APPROVED,
+    ))
     db.session.commit()
     login(client, username='owner2')
 
@@ -261,7 +257,41 @@ def test_restaurant_cannot_touch_other_orders(client, app):
     assert order.status == OrderStatus.PENDING
 
 
-# ---------------- CẤU HÌNH NHÀ HÀNG (DAO) ----------------
+@pytest.mark.parametrize('status,active', [
+    (None, False),
+    ('pending', True),
+])
+def test_non_operational_restaurant_cannot_process_orders(
+        client, app, status, active):
+    from app.models import RestaurantStatus
+
+    owner, restaurant = make_owner_and_restaurant()
+    restaurant.active = active
+    if status == 'pending':
+        restaurant.status = RestaurantStatus.PENDING
+    customer = make_customer()
+    order = make_order(restaurant, customer)
+    db.session.commit()
+    login(client, username=owner.username)
+
+    response = client.post(f'/restaurant/orders/{order.id}/confirm')
+    assert response.status_code == 403
+    db.session.refresh(order)
+    assert order.status == OrderStatus.PENDING
+
+
+def test_pending_restaurant_can_view_dashboard_and_settings(client, app):
+    from app.models import RestaurantStatus
+
+    owner, restaurant = make_owner_and_restaurant()
+    restaurant.status = RestaurantStatus.PENDING
+    db.session.commit()
+    login(client, username=owner.username)
+
+    assert client.get('/restaurant/').status_code == 200
+    assert client.get('/restaurant/settings').status_code == 200
+
+
 
 def test_update_restaurant_settings_success(app):
     _, restaurant = make_owner_and_restaurant()
@@ -332,7 +362,6 @@ def test_update_restaurant_settings_invalid_radius(app):
                                         'delivery_radius_km': '-1'})
 
 
-# ---------------- DASHBOARD & SETTINGS (ROUTER) ----------------
 
 def test_dashboard_requireslogin(client):
     assert client.get('/restaurant/').status_code == 302
@@ -427,7 +456,6 @@ def test_settings_post_saves(client, app):
     assert restaurant.max_quantity_per_item == 8
 
 
-# ---------------- CHẶN NHÀ HÀNG ĐẶT HÀNG ----------------
 
 def test_login_redirects_restaurant_to_dashboard(client, app):
     make_owner_and_restaurant()
@@ -458,7 +486,6 @@ def test_restaurant_blocked_from_cart(client, app):
     assert client.get('/cart/checkout').status_code == 403
 
 
-# ---------------- SỐ LƯỢNG TỐI ĐA 1 MÓN/ĐƠN ----------------
 
 def test_cart_max_quantity_uses_restaurant_override(app):
     _, restaurant = make_owner_and_restaurant()
@@ -487,7 +514,6 @@ def test_cart_max_quantity_default_when_no_override(app):
         cart_dao.add_to_cart(customer.id, dish.id, quantity=1)
 
 
-# ---------------- GIỎ HÀNG MỘT NHÀ HÀNG ----------------
 
 def test_cart_blocks_adding_from_other_restaurant(app):
     _, restaurant_a = make_owner_and_restaurant()
@@ -524,7 +550,6 @@ def test_clear_all_carts_allows_adding_other_restaurant(app):
     assert carts[0].restaurant_id == restaurant_b.id
 
 
-# ---------------- KHOẢNG CÁCH GIAO HÀNG (HAVERSINE) ----------------
 
 def test_haversine_known_distance():
     from app.utils import haversine_km
@@ -564,6 +589,34 @@ def test_update_settings_saves_coordinates(app):
     assert restaurant.latitude == 10.7769
     assert restaurant.longitude == 106.7009
     assert restaurant.delivery_radius_km == 6
+
+
+def test_coordinate_parser_accepts_valid_and_rejects_invalid_values(app):
+    assert dao._parse_coordinate('10.7769', -90, 90, 'Vĩ độ') == 10.7769
+    with pytest.raises(ValueError, match='GPS'):
+        dao._parse_coordinate('not-a-coordinate', -90, 90, 'Vĩ độ')
+
+
+def test_restaurant_registration_success(app, client):
+    from app.models import RestaurantStatus, UserRole
+
+    customer = make_customer()
+    db.session.commit()
+    login(client, username=customer.username)
+
+    response = client.post('/restaurant/register', data={
+        'name': 'Quán mới',
+        'address': 'Quận 1',
+        'phone': '0901234567',
+        'latitude': '10.7769',
+        'longitude': '106.7009',
+    })
+
+    assert response.status_code == 302
+    restaurant = dao.get_restaurant_for_owner(customer.id)
+    assert restaurant.status == RestaurantStatus.PENDING
+    assert restaurant.latitude == 10.7769
+    assert customer.role == UserRole.RESTAURANT
 
 
 def test_update_settings_invalid_coordinates(app):

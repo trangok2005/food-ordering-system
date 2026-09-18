@@ -2,37 +2,39 @@
 {% block title %}Đăng ký nhà hàng | Food Ordering System{% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<section class="py-5">
   <div class="row justify-content-center">
     <div class="col-lg-7">
-      <div class="card shadow-sm">
+      <div class="card">
         <div class="card-body p-4">
-          <h3 class="mb-1">Đăng ký nhà hàng</h3>
+          <span class="page-eyebrow">Trở thành đối tác</span>
+          <h1 class="section-title">Đăng ký nhà hàng</h1>
           <p class="text-muted">
             Điền thông tin nhà hàng để bắt đầu bán món ăn trên TvT-food.
             Sau khi gửi, quản trị viên sẽ duyệt trong vòng 24 giờ.
           </p>
 
-          <form method="post" novalidate>
+          <form method="post">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div class="mb-3">
-              <label class="form-label">Tên nhà hàng <span class="text-danger">*</span></label>
-              <input type="text" name="name" class="form-control" required maxlength="255"
+              <label class="form-label" for="restaurant-name">Tên nhà hàng <span class="text-danger">*</span></label>
+              <input id="restaurant-name" type="text" name="name" class="form-control" required maxlength="255"
                      placeholder="vd: Sushi House" />
             </div>
             <div class="mb-3">
-              <label class="form-label">Địa chỉ <span class="text-danger">*</span></label>
-              <input type="text" name="address" class="form-control" required maxlength="255"
+              <label class="form-label" for="restaurant-address">Địa chỉ <span class="text-danger">*</span></label>
+              <input id="restaurant-address" type="text" name="address" class="form-control" required maxlength="255" autocomplete="street-address"
                      placeholder="Số nhà, đường, quận/huyện" />
             </div>
             <div class="row">
               <div class="col-md-6 mb-3">
-                <label class="form-label">Số điện thoại</label>
-                <input type="tel" name="phone" class="form-control" maxlength="11"
+                <label class="form-label" for="restaurant-phone">Số điện thoại</label>
+                <input id="restaurant-phone" type="tel" name="phone" class="form-control" maxlength="11" inputmode="numeric" pattern="[0-9]{10,11}" autocomplete="tel"
                        placeholder="10-11 ký số" />
               </div>
               <div class="col-md-6 mb-3">
-                <label class="form-label">Mô tả ngắn</label>
-                <input type="text" name="description" class="form-control" maxlength="255"
+                <label class="form-label" for="restaurant-description">Mô tả ngắn</label>
+                <input id="restaurant-description" type="text" name="description" class="form-control" maxlength="255"
                        placeholder="Món đặc trưng của nhà hàng" />
               </div>
             </div>
@@ -42,22 +44,26 @@
               (dùng tính khoảng cách giao hàng đường chim bay). Có thể điền tay nếu trình duyệt
               không hỗ trợ định vị.
               <div class="d-flex gap-2 mt-2 flex-wrap">
-                <button type="button" class="btn btn-outline-primary btn-sm" id="btnGps">
-                  &#128205; Dùng vị trí hiện tại
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnGps"
+                        data-geolocation data-status="#gpsStatus" data-latitude="#latInput"
+                        data-longitude="#lngInput" data-precision="6"
+                        data-success="Đã lấy tọa độ GPS."
+                        data-error="Không lấy được vị trí, hãy kiểm tra quyền hoặc điền tay.">
+                  Dùng vị trí hiện tại
                 </button>
-                <span id="gpsStatus" class="align-self-center text-muted small"></span>
+                <span id="gpsStatus" class="location-status" aria-live="polite"></span>
               </div>
             </div>
 
             <div class="row">
               <div class="col-md-6 mb-3">
-                <label class="form-label">Vĩ độ (latitude)</label>
-                <input type="text" name="latitude" id="latInput" class="form-control"
+                <label class="form-label" for="latInput">Vĩ độ (latitude)</label>
+                <input type="number" name="latitude" id="latInput" class="form-control" step="any" min="-90" max="90" required
                        placeholder="vd: 10.7769" />
               </div>
               <div class="col-md-6 mb-3">
-                <label class="form-label">Kinh độ (longitude)</label>
-                <input type="text" name="longitude" id="lngInput" class="form-control"
+                <label class="form-label" for="lngInput">Kinh độ (longitude)</label>
+                <input type="number" name="longitude" id="lngInput" class="form-control" step="any" min="-180" max="180" required
                        placeholder="vd: 106.7009" />
               </div>
             </div>
@@ -68,25 +74,5 @@
       </div>
     </div>
   </div>
-</div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-  document.getElementById('btnGps').addEventListener('click', function () {
-    const status = document.getElementById('gpsStatus');
-    if (!navigator.geolocation) {
-      status.textContent = 'Trình duyệt không hỗ trợ định vị.';
-      return;
-    }
-    status.textContent = 'Đang lấy vị trí...';
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      document.getElementById('latInput').value = pos.coords.latitude.toFixed(6);
-      document.getElementById('lngInput').value = pos.coords.longitude.toFixed(6);
-      status.textContent = 'Đã lấy tọa độ GPS.';
-    }, function () {
-      status.textContent = 'Không lấy được vị trí, hãy điền tay.';
-    });
-  });
-</script>
+</section>
 {% endblock %}

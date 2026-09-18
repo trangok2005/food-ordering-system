@@ -1,11 +1,11 @@
 from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from app.models import OrderStatus, PaymentStatus
+from app.models import OrderStatus, PaymentStatus, RestaurantStatus, UserRole
 from app.restaurant import restaurant_bp, dao
 
 
-def get_restaurant():
+def get_restaurant(require_operational=False):
     if not current_user.is_authenticated:
         abort(403)
 
@@ -17,7 +17,110 @@ def get_restaurant():
     if restaurant is None:
         abort(404)
 
+    if require_operational and (
+        not restaurant.active
+        or restaurant.status != RestaurantStatus.APPROVED
+    ):
+        abort(403)
+
     return restaurant
+
+
+def _redirect_menu(action, success_message):
+    restaurant = get_restaurant(require_operational=True)
+    try:
+        action(restaurant)
+        flash(success_message, 'success')
+    except ValueError as exc:
+        flash(str(exc), 'error')
+    return redirect(url_for('restaurant.menu_view'))
+
+
+@restaurant_bp.route('/register', methods=['GET', 'POST'])
+@login_required
+def register_restaurant_view():
+    if current_user.role.name not in ('CUSTOMER', 'USER'):
+        abort(403)
+    if dao.get_restaurant_for_owner(current_user.id):
+        return redirect(url_for('restaurant.dashboard'))
+    if request.method == 'POST':
+        try:
+            dao.register_restaurant(current_user, request.form)
+            current_user.role = UserRole.RESTAURANT
+            dao.commit()
+            flash('Đã gửi đăng ký nhà hàng. Vui lòng chờ quản trị viên duyệt.', 'success')
+            return redirect(url_for('restaurant.dashboard'))
+        except ValueError as exc:
+            flash(str(exc), 'error')
+    return render_template('restaurant/register.html')
+
+
+@restaurant_bp.route('/menu')
+@login_required
+def menu_view():
+    restaurant = get_restaurant(require_operational=True)
+    return render_template('restaurant/menu.html', restaurant=restaurant,
+                           categories=dao.get_categories(restaurant.id),
+                           dishes=dao.get_all_dishes(restaurant.id), active='menu')
+
+
+@restaurant_bp.route('/categories', methods=['POST'])
+@login_required
+def add_category():
+    return _redirect_menu(lambda restaurant: dao.add_category(
+        restaurant, request.form.get('name')), 'Đã thêm danh mục')
+
+
+@restaurant_bp.route('/categories/<int:category_id>', methods=['POST'])
+@login_required
+def rename_category(category_id):
+    return _redirect_menu(lambda restaurant: dao.rename_category(
+        restaurant, category_id, request.form.get('name')), 'Đã đổi tên danh mục')
+
+
+@restaurant_bp.route('/categories/<int:category_id>/delete', methods=['POST'])
+@login_required
+def delete_category(category_id):
+    return _redirect_menu(lambda restaurant: dao.delete_category(
+        restaurant, category_id), 'Đã xóa danh mục')
+
+
+@restaurant_bp.route('/dishes', methods=['POST'])
+@login_required
+def add_dish():
+    return _redirect_menu(lambda restaurant: dao.add_dish(
+        restaurant, request.form), 'Đã thêm món ăn')
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>', methods=['POST'])
+@login_required
+def update_dish(dish_id):
+    return _redirect_menu(lambda restaurant: dao.update_dish(
+        restaurant, dish_id, request.form), 'Đã cập nhật món ăn')
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>/toggle', methods=['POST'])
+@login_required
+def toggle_dish(dish_id):
+    return _redirect_menu(lambda restaurant: dao.toggle_dish_availability(
+        restaurant, dish_id), 'Đã cập nhật trạng thái món ăn')
+
+
+@restaurant_bp.route('/dishes/<int:dish_id>/delete', methods=['POST'])
+@login_required
+def delete_dish(dish_id):
+    return _redirect_menu(lambda restaurant: dao.delete_dish(
+        restaurant, dish_id), 'Đã ẩn món ăn')
+
+
+@restaurant_bp.route('/pairings/recompute', methods=['POST'])
+@login_required
+def recompute_pairings():
+    restaurant = get_restaurant(require_operational=True)
+    from app.ai.pairing import recompute_restaurant_pairings
+    count = recompute_restaurant_pairings(restaurant.id)
+    flash(f'Đã cập nhật {count} luật kết hợp món ăn.', 'success')
+    return redirect(url_for('restaurant.dashboard'))
 
 
 def get_order(order_id, restaurant):
@@ -48,14 +151,14 @@ def dashboard():
     dao.expire_overdue_orders(restaurant.id)
 
     stats = dao.get_dashboard_stats(restaurant.id)
-    orders = dao.get_restaurant_orders(restaurant.id)
-    orders = orders[:6]
+    orders = dao.get_restaurant_orders(restaurant.id, limit=6)
 
     return render_template(
         'restaurant/dashboard.html',
         restaurant=restaurant,
         stats=stats,
         orders=orders,
+        OrderStatus=OrderStatus,
         active='dashboard'
     )
 
@@ -85,7 +188,7 @@ def settings_view():
 @restaurant_bp.route('/orders')
 @login_required
 def orders_view():
-    restaurant = get_restaurant()
+    restaurant = get_restaurant(require_operational=True)
 
     expired_orders = dao.expire_overdue_orders(restaurant.id)
 
@@ -98,9 +201,10 @@ def orders_view():
     status_name = request.args.get('status')
     status = get_status(status_name)
 
-    orders = dao.get_restaurant_orders(
+    pagination = dao.get_restaurant_orders(
         restaurant.id,
-        status
+        status,
+        page=max(request.args.get('page', 1, type=int), 1),
     )
 
     counts = dao.get_order_status_counts(restaurant.id)
@@ -108,7 +212,8 @@ def orders_view():
     return render_template(
         'restaurant/orders.html',
         restaurant=restaurant,
-        orders=orders,
+        orders=pagination.items,
+        pagination=pagination,
         statuses=OrderStatus,
         current_status=status,
         counts=counts,
@@ -120,7 +225,7 @@ def orders_view():
 @restaurant_bp.route('/orders/<int:order_id>/confirm', methods=['POST'])
 @login_required
 def confirm_order(order_id):
-    restaurant = get_restaurant()
+    restaurant = get_restaurant(require_operational=True)
     order = get_order(order_id, restaurant)
 
     try:
@@ -136,7 +241,7 @@ def confirm_order(order_id):
 @restaurant_bp.route('/orders/<int:order_id>/advance', methods=['POST'])
 @login_required
 def advance_order(order_id):
-    restaurant = get_restaurant()
+    restaurant = get_restaurant(require_operational=True)
     order = get_order(order_id, restaurant)
 
     try:
@@ -156,7 +261,7 @@ def advance_order(order_id):
 @restaurant_bp.route('/orders/<int:order_id>/cancel', methods=['POST'])
 @login_required
 def cancel_order(order_id):
-    restaurant = get_restaurant()
+    restaurant = get_restaurant(require_operational=True)
     order = get_order(order_id, restaurant)
 
     reason = request.form.get('reason', '').strip()
@@ -164,26 +269,6 @@ def cancel_order(order_id):
     try:
         dao.cancel_order(order, reason)
         flash(f'Đã hủy đơn #{order.id}')
-
-    except ValueError as e:
-        flash(str(e), 'error')
-
-    return redirect(url_for('restaurant.orders_view'))
-
-
-@restaurant_bp.route('/orders/<int:order_id>/mark-refunded', methods=['POST'])
-@login_required
-def mark_refunded(order_id):
-    restaurant = get_restaurant()
-    order = get_order(order_id, restaurant)
-
-    try:
-        dao.mark_refunded(order)
-
-        flash(
-            f'Đã đánh dấu đơn #{order.id} là đã hoàn tiền '
-            f'(nhà hàng tự hoàn ngoài hệ thống)'
-        )
 
     except ValueError as e:
         flash(str(e), 'error')

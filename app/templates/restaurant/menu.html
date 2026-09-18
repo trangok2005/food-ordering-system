@@ -2,23 +2,25 @@
 {% block title %}Quản lý thực đơn | Food Ordering System{% endblock %}
 
 {% block content %}
-<div class="container py-4">
+<section class="py-4">
   <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-    <h2 class="mb-0">Quản lý thực đơn - {{ restaurant.name }}</h2>
+    <div><span class="page-eyebrow">{{ restaurant.name }}</span><h1 class="section-title mb-0">Quản lý thực đơn</h1></div>
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDishModal">
       + Thêm món ăn
     </button>
   </div>
 
+  {% include 'restaurant/_nav.html' %}
+
   {% if not restaurant.is_open %}
   <div class="alert alert-warning">Nhà hàng đang <strong>đóng cửa</strong> - khách không thể đặt đơn.</div>
   {% endif %}
 
-  <!-- Danh mục -->
-  <div class="card shadow-sm mb-4">
-    <div class="card-header bg-white fw-bold">Danh mục món ăn</div>
+  <div class="card mb-4">
+    <div class="cart-card-header"><h2 class="cart-restaurant">Danh mục món ăn</h2></div>
     <div class="card-body">
       <form method="post" action="{{ url_for('restaurant.add_category') }}" class="row g-2 mb-3">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <div class="col-md-8">
           <input type="text" name="name" class="form-control" placeholder="Tên danh mục mới (vd: Món chính)" required maxlength="100" />
         </div>
@@ -30,7 +32,7 @@
       {% if categories %}
       <table class="table table-hover align-middle">
         <thead>
-          <tr><th>Tên danh mục</th><th>Số món</th><th style="width: 220px;">Thao tác</th></tr>
+          <tr><th>Tên danh mục</th><th>Số món</th><th>Thao tác</th></tr>
         </thead>
         <tbody>
           {% for category in categories %}
@@ -41,12 +43,14 @@
               <div class="d-flex gap-1">
                 <form method="post" action="{{ url_for('restaurant.rename_category', category_id=category.id) }}"
                       class="d-flex gap-1 flex-grow-1">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                   <input type="text" name="name" value="{{ category.name }}" class="form-control form-control-sm" required maxlength="100" />
                   <button type="submit" class="btn btn-sm btn-outline-secondary" title="Đổi tên">&#9998;</button>
                 </form>
                 <form method="post" action="{{ url_for('restaurant.delete_category', category_id=category.id) }}"
-                      onsubmit="return confirm('Xóa danh mục này? (chỉ xóa được khi trống món)')">
-                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Xóa">&#128465;</button>
+                       data-confirm="Xóa danh mục này? Chỉ danh mục trống mới có thể xóa.">
+                  <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
                 </form>
               </div>
             </td>
@@ -60,16 +64,15 @@
     </div>
   </div>
 
-  <!-- Món ăn -->
-  <div class="card shadow-sm">
-    <div class="card-header bg-white fw-bold">Danh sách món ăn</div>
+  <div class="card">
+    <div class="cart-card-header"><h2 class="cart-restaurant">Danh sách món ăn</h2></div>
     <div class="card-body">
       {% if dishes %}
       <div class="table-responsive">
         <table class="table table-hover align-middle">
           <thead>
             <tr>
-              <th>Món</th><th>Danh mục</th><th>Giá</th><th>Trạng thái</th><th style="width: 260px;">Thao tác</th>
+              <th>Món</th><th>Danh mục</th><th>Giá</th><th>Trạng thái</th><th>Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -83,9 +86,9 @@
               <td class="text-nowrap">{{ dish.price|vnd }}</td>
               <td>
                 {% if dish.is_available %}
-                <span class="badge bg-success">Đang bán</span>
+                  <span class="status-badge status-completed">Đang bán</span>
                 {% else %}
-                <span class="badge bg-secondary">Hết hàng</span>
+                  <span class="status-badge status-unavailable">Hết hàng</span>
                 {% endif %}
               </td>
               <td>
@@ -93,12 +96,14 @@
                   <button class="btn btn-sm btn-outline-primary"
                           data-bs-toggle="modal" data-bs-target="#editDishModal{{ dish.id }}">Sửa</button>
                   <form method="post" action="{{ url_for('restaurant.toggle_dish', dish_id=dish.id) }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-sm btn-outline-warning">
                       {{ 'Ẩn món' if dish.is_available else 'Bật bán' }}
                     </button>
                   </form>
                   <form method="post" action="{{ url_for('restaurant.delete_dish', dish_id=dish.id) }}"
-                        onsubmit="return confirm('Xóa món {{ dish.name }}? Món sẽ bị ẩn khỏi thực đơn.')">
+                         data-confirm="Xóa món {{ dish.name }}? Món sẽ bị ẩn khỏi thực đơn.">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-sm btn-outline-danger">Xóa</button>
                   </form>
                 </div>
@@ -113,14 +118,14 @@
       {% endif %}
     </div>
   </div>
-</div>
+</section>
 
-<!-- Modal thêm món -->
 <div class="modal fade" id="addDishModal" tabindex="-1">
   <div class="modal-dialog">
     <form method="post" action="{{ url_for('restaurant.add_dish') }}" class="modal-content">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="modal-header"><h5 class="modal-title">Thêm món ăn</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button></div>
       <div class="modal-body">
         {% include 'restaurant/_dish_fields.html' %}
       </div>
@@ -132,13 +137,13 @@
   </div>
 </div>
 
-<!-- Modal sửa từng món -->
 {% for dish in dishes %}
 <div class="modal fade" id="editDishModal{{ dish.id }}" tabindex="-1">
   <div class="modal-dialog">
     <form method="post" action="{{ url_for('restaurant.update_dish', dish_id=dish.id) }}" class="modal-content">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="modal-header"><h5 class="modal-title">Sửa món: {{ dish.name }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button></div>
       <div class="modal-body">
         {% with dish_data=dish %}
         {% include 'restaurant/_dish_fields.html' %}

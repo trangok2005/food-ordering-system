@@ -1,17 +1,8 @@
 {% extends 'layout/base.html' %}
+{% from 'components/_status.html' import order_status %}
 {% block title %}Tổng Quan | {{ restaurant.name }}{% endblock %}
 
 {% block content %}
-{% set badge = {
-  'PENDING': ('warning text-dark', 'Chờ xác nhận'),
-  'CONFIRMED': ('info', 'Đã xác nhận'),
-  'PREPARING': ('info', 'Đang chuẩn bị'),
-  'DELIVERING': ('primary', 'Đang giao'),
-  'COMPLETED': ('success', 'Hoàn thành'),
-  'CANCELLED': ('secondary', 'Đã hủy'),
-  'EXPIRED': ('dark', 'Quá hạn'),
-} %}
-
 <section class="restaurant-hero">
   <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
   <p class="restaurant-hero-desc">{{ restaurant.description or 'Trang quản lý nhà hàng' }}</p>
@@ -29,21 +20,21 @@
   <div class="col-md-3 col-6">
     <div class="feature-card text-center">
       <div class="feature-icon">&#9201;</div>
-      <h3>{{ stats.counts.get('PENDING', 0) }}</h3>
+      <h3>{{ stats.counts.get(OrderStatus.PENDING, 0) }}</h3>
       <p class="text-muted mb-0">Chờ xác nhận</p>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="feature-card text-center">
       <div class="feature-icon">&#127836;</div>
-      <h3>{{ stats.counts.get('PREPARING', 0) + stats.counts.get('CONFIRMED', 0) }}</h3>
+      <h3>{{ stats.counts.get(OrderStatus.PREPARING, 0) + stats.counts.get(OrderStatus.CONFIRMED, 0) }}</h3>
       <p class="text-muted mb-0">Đang chuẩn bị</p>
     </div>
   </div>
   <div class="col-md-3 col-6">
     <div class="feature-card text-center">
       <div class="feature-icon">&#128666;</div>
-      <h3>{{ stats.counts.get('DELIVERING', 0) }}</h3>
+      <h3>{{ stats.counts.get(OrderStatus.DELIVERING, 0) }}</h3>
       <p class="text-muted mb-0">Đang giao</p>
     </div>
   </div>
@@ -68,7 +59,6 @@
         <table class="table align-middle mb-0">
           <tbody>
             {% for order in orders %}
-            {% set cls, label = badge.get(order.status.name, ('secondary', order.status.name)) %}
             <tr>
               <td>
                 <strong>Đơn #{{ order.id }}</strong>
@@ -76,7 +66,7 @@
               </td>
               <td>{{ order.user.full_name or order.user.username }}</td>
               <td class="text-end">{{ order.total_amount|vnd }}</td>
-              <td class="text-end"><span class="badge bg-{{ cls }}">{{ label }}</span></td>
+              <td class="text-end">{{ order_status(order.status.name) }}</td>
             </tr>
             {% endfor %}
           </tbody>
@@ -112,6 +102,7 @@
       </div>
       <div class="px-3 pb-3">
         <form method="post" action="{{ url_for('restaurant.recompute_pairings') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-success btn-sm w-100"
                   title="Tính lại luật kết hợp món đi kèm từ các đơn đã hoàn thành">
             &#129386; Cập nhật luật kết hợp món ăn (AI)

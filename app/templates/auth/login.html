@@ -4,27 +4,23 @@
 {% block content %}
 <div class="auth-wrapper">
   <div class="auth-card">
-    <h2 class="auth-title">Đăng Nhập</h2>
+    <div class="auth-brand-mark" aria-hidden="true">T</div>
+    <h1 class="auth-title">Chào mừng trở lại</h1>
+    <p class="auth-lead">Đăng nhập để tiếp tục đặt món và theo dõi đơn hàng.</p>
 
     {% if err_msg %}
     <div class="alert alert-danger" role="alert">{{ err_msg }}</div>
     {% endif %}
 
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    {% for message in messages %}
-    <div class="alert alert-success" role="alert">{{ message }}</div>
-    {% endfor %}
-    {% endif %}
-    {% endwith %}
-
     <form action="{{ url_for('auth.login_process') }}" method="post">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="form-floating mb-3">
         <input
           type="text"
           class="form-control"
           id="username"
           name="username"
+          autocomplete="username"
           placeholder="Tên đăng nhập"
           required />
         <label for="username">Tên đăng nhập</label>
@@ -35,13 +31,14 @@
           class="form-control"
           id="password"
           name="password"
+          autocomplete="current-password"
           placeholder="Mật khẩu"
           required />
         <label for="password">Mật khẩu</label>
       </div>
 
       <button class="btn btn-primary w-100 btn-auth mb-3" type="submit">
-        ĐĂNG NHẬP
+        Đăng nhập
       </button>
       <div class="text-center mb-2">
         <a href="{{ url_for('auth.forgot_password_view') }}" class="auth-link small">Quên mật khẩu?</a>
@@ -68,108 +65,4 @@
       </div>
   </div>
 </div>
-{% endblock %}
-
-{% block style %}
-<style>
-  .auth-wrapper {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 60vh;
-    padding: 2rem;
-  }
-
-  .auth-card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-    padding: 2.5rem;
-    width: 100%;
-    max-width: 420px;
-  }
-
-  .auth-title {
-    font-family: 'Playfair Display', serif;
-    font-weight: 700;
-    text-align: center;
-    color: #2c3e50;
-    margin-bottom: 1.5rem;
-  }
-
-  .btn-auth {
-    padding: 0.85rem;
-    font-size: 1.05rem;
-    font-weight: 600;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #e67e22, #d35400);
-    border: none;
-    transition: all 0.3s ease;
-  }
-
-  .btn-auth:hover {
-    background: linear-gradient(135deg, #d35400, #e67e22);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
-  }
-
-  .auth-link {
-    color: #e67e22;
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-
-  .auth-link:hover {
-    color: #d35400;
-    text-decoration: underline;
-  }
-
-  .form-floating > label {
-    color: #6c757d;
-  }
-
-  .form-control:focus {
-    border-color: #e67e22;
-    box-shadow: 0 0 0 0.2rem rgba(230, 126, 34, 0.25);
-  }
-
-  .oauth-divider {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    color: #6c757d;
-    margin: 1.25rem 0;
-    font-size: 0.85rem;
-  }
-
-  .oauth-divider::before,
-  .oauth-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: #e5e5e5;
-  }
-
-  .btn-google {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.6rem;
-    background: #fff;
-    border: 1px solid #ddd;
-    color: #333;
-    font-weight: 600;
-    padding: 0.7rem;
-    border-radius: 8px;
-    transition: all 0.2s ease;
-  }
-
-  .btn-google:hover {
-    background: #f6f6f6;
-    border-color: #bbb;
-    color: #333;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-</style>
 {% endblock %}

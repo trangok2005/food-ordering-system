@@ -3,28 +3,28 @@
   if (!form) return;
 
   const confirmBtn = document.getElementById("confirm-order");
-  const useLocationBtn = document.getElementById("use-location");
-  const locationStatus = document.getElementById("location-status");
-  const latInput = document.getElementById("lat");
-  const lngInput = document.getElementById("lng");
-
-  // Cửa sổ hủy miễn phí 10 giây (Quy tắc bắt buộc #5 - Project Charter):
-  // sau khi bấm "Đặt hàng", khách có 10 giây để hủy miễn phí; hết giờ,
-  // hệ thống TỰ ĐỘNG chuyển sang cổng thanh toán và không hỗ trợ hủy nữa.
+  // khách có 10 giây hủy trước khi sang cổng thanh toán
   const FREE_CANCEL_SECONDS = 10;
   let countdownTimer = null;
+  let isSubmitting = false;
+  const modalEl = document.getElementById("freeCancelModal");
+  const modal = modalEl && window.bootstrap ? new bootstrap.Modal(modalEl) : null;
 
   function startFreeCancelWindow() {
-    const modalEl = document.getElementById("freeCancelModal");
-    if (!modalEl) {
+    if (!modal) {
+      isSubmitting = true;
       form.submit();
       return;
     }
     const counter = document.getElementById("cancelCountdown");
+    if (!counter) {
+      form.submit();
+      return;
+    }
     let secondsLeft = FREE_CANCEL_SECONDS;
     counter.textContent = secondsLeft;
 
-    const modal = new bootstrap.Modal(modalEl);
+    confirmBtn.disabled = true;
     modal.show();
 
     clearInterval(countdownTimer);
@@ -32,6 +32,7 @@
       secondsLeft -= 1;
       if (secondsLeft <= 0) {
         clearInterval(countdownTimer);
+        isSubmitting = true;
         modal.hide();
         form.submit();
         return;
@@ -42,6 +43,8 @@
 
   function stopFreeCancelWindow() {
     clearInterval(countdownTimer);
+    countdownTimer = null;
+    if (!isSubmitting && confirmBtn) confirmBtn.disabled = false;
   }
 
   if (confirmBtn) {
@@ -59,28 +62,23 @@
   if (freeCancelBtn) {
     freeCancelBtn.addEventListener("click", () => {
       stopFreeCancelWindow();
-      bootstrap.Modal.getInstance(document.getElementById("freeCancelModal")).hide();
+      if (modal) modal.hide();
     });
   }
 
-  if (useLocationBtn) {
-    useLocationBtn.addEventListener("click", () => {
-      if (!navigator.geolocation) {
-        locationStatus.textContent = "Trình duyệt không hỗ trợ định vị.";
-        return;
+  if (modalEl) modalEl.addEventListener("hidden.bs.modal", stopFreeCancelWindow);
+
+  window.TvTFood.initGeolocation({
+    button: "#use-location",
+    status: "#location-status",
+    latitude: "#lat",
+    longitude: "#lng",
+    successMessage: "Đã lấy vị trí. Hệ thống sẽ kiểm tra bán kính giao hàng.",
+    errorMessage: "Không lấy được vị trí. Vui lòng cấp quyền định vị và thử lại.",
+    onSuccess: function () {
+      if (confirmBtn && confirmBtn.dataset.blockingIssues !== "true") {
+        confirmBtn.disabled = false;
       }
-      locationStatus.textContent = "Đang xác định vị trí...";
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          latInput.value = pos.coords.latitude;
-          lngInput.value = pos.coords.longitude;
-          locationStatus.textContent = "Đã lấy vị trí. Hệ thống sẽ kiểm tra bán kính giao hàng.";
-        },
-        () => {
-          locationStatus.textContent = "Không lấy được vị trí (bạn có thể bỏ qua, sẽ không kiểm tra bán kính).";
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
-      );
-    });
-  }
+    },
+  });
 })();

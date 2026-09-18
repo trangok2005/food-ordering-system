@@ -5,10 +5,9 @@
 <section class="checkout-section">
   <div class="row justify-content-center">
     <div class="col-lg-6 col-md-8">
-      <div class="card shadow-sm">
-        <div class="card-header bg-warning text-dark d-flex align-items-center gap-2">
-          <span class="fs-4">&#9888;</span>
-          <strong>Cổng thanh toán PayOS - CHẾ ĐỘ GIẢ LẬP (MOCK)</strong>
+      <div class="card">
+        <div class="cart-card-header">
+          <strong>PayOS - Chế độ giả lập</strong>
         </div>
         <div class="card-body">
           <p class="text-muted small">
@@ -39,11 +38,13 @@
           {% if payment.status == 'PENDING' %}
           <div class="d-grid gap-2">
             <form method="post" action="{{ url_for('cart.mock_pay', payment_id=payment.id) }}">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-primary btn-lg w-100">
                 &#9989; Giả lập thanh toán thành công
               </button>
             </form>
             <form method="post" action="{{ url_for('cart.mock_cancel', payment_id=payment.id) }}">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-outline-danger w-100">Hủy thanh toán</button>
             </form>
           </div>

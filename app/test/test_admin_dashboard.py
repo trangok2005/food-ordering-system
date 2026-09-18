@@ -9,7 +9,6 @@ from app.test.test_base import (app, client,
                                 make_order, make_dish, login)
 
 
-# ---------------- PHÂN QUYỀN ----------------
 
 def test_admin_dashboard_requires_login(client, app):
     assert client.get('/admin/').status_code == 302
@@ -30,7 +29,6 @@ def test_admin_login_redirects_to_admin(client, app):
     assert res.headers['Location'].endswith('/admin/')
 
 
-# ---------------- PHÊ DUYỆT NHÀ HÀNG ----------------
 
 def test_approve_restaurant(client, app):
     make_admin()
@@ -73,11 +71,28 @@ def test_lock_and_unlock_restaurant(client, app):
     assert restaurant.status == RestaurantStatus.APPROVED
 
 
+def test_admin_transition_rejects_stale_restaurant_state(app):
+    owner = make_restaurant_owner()
+    restaurant = make_restaurant(owner, RestaurantStatus.PENDING)
+    db.session.commit()
+    db.session.query(type(restaurant)).filter_by(id=restaurant.id).update(
+        {'status': RestaurantStatus.LOCKED}, synchronize_session=False)
+    db.session.commit()
+    restaurant.__dict__['status'] = RestaurantStatus.PENDING
+
+    from app.admin import dao as admin_dao
+    with pytest.raises(ValueError):
+        admin_dao.approve_restaurant(restaurant)
+    db.session.refresh(restaurant)
+    assert restaurant.status == RestaurantStatus.LOCKED
+
+
 def test_restaurants_view_filters_by_status(client, app):
     make_admin()
-    owner = make_restaurant_owner()
-    make_restaurant(owner, RestaurantStatus.PENDING)
-    make_restaurant(owner, RestaurantStatus.APPROVED)
+    pending_owner = make_restaurant_owner('pending')
+    approved_owner = make_restaurant_owner('approved')
+    make_restaurant(pending_owner, RestaurantStatus.PENDING)
+    make_restaurant(approved_owner, RestaurantStatus.APPROVED)
     db.session.commit()
     login(client, username='admin')
 
@@ -87,7 +102,6 @@ def test_restaurants_view_filters_by_status(client, app):
     assert 'Nhà hàng' in html
 
 
-# ---------------- THỐNG KÊ ----------------
 
 def test_dashboard_stats_page(client, app):
     make_admin()

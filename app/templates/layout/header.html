@@ -1,12 +1,15 @@
-<nav class="navbar navbar-expand-lg">
+<header class="site-header">
+<nav class="navbar navbar-expand-lg navbar-light" aria-label="Điều hướng chính">
   <div class="container">
     <a
       class="navbar-brand"
-      href="{% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}/admin{% else %}/{% endif %}">
+      href="{% if current_user.is_authenticated and current_user.role.name == 'ADMIN' %}{{ url_for('admin.dashboard') }}{% else %}{{ url_for('index') }}{% endif %}">
       <img
         src="{{ url_for('static', filename='images/logo.png') }}"
         class="img-fluid"
-        alt="Logo" />
+        width="42"
+        height="42"
+        alt="TvT-food" />
       <span>TvT-food</span>
     </a>
 
@@ -17,7 +20,7 @@
       data-bs-target="#mainNav"
       aria-controls="mainNav"
       aria-expanded="false"
-      aria-label="Chuyển hướng">
+      aria-label="Mở menu điều hướng">
       <span class="navbar-toggler-icon"></span>
     </button>
 
@@ -26,7 +29,7 @@
             current_user.role.name in ['USER', 'CUSTOMER'] %}
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link" href="/">Trang chủ</a>
+          <a class="nav-link" href="{{ url_for('index') }}">Trang chủ</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="{{ url_for('browse.search_view') }}">Tìm món</a>
@@ -34,57 +37,55 @@
       </ul>
       {% endif %}
 
-      <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="navbar-actions d-flex align-items-center ms-lg-auto">
         {% if current_user.is_authenticated %}
-        <span class="text-white fw-bold">Chào, {{ current_user.username }}</span>
-
-        <a href="{{ url_for('auth.profile_view') }}" class="btn btn-outline-light btn-sm"
-          >Hồ sơ</a
-        >
-
         {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
-        <a href="{{ url_for('cart.my_orders') }}" class="btn btn-outline-info btn-sm"
-          >Hóa đơn của tôi</a
-        >
-        <a href="{{ url_for('ai.suggestions_view') }}" class="btn btn-outline-info btn-sm"
-          >Gợi ý cho bạn</a
-        >
-        <a href="{{ url_for('ai.my_reviews') }}" class="btn btn-outline-info btn-sm"
-          >Đánh giá của tôi</a
-        >
+        <a href="{{ url_for('ai.suggestions_view') }}" class="nav-link nav-action-link">Gợi ý món</a>
+        <a href="{{ url_for('cart.my_orders') }}" class="nav-link nav-action-link">Đơn hàng</a>
         {% elif current_user.role.name == 'RESTAURANT' %}
-        <a href="{{ url_for('restaurant.dashboard') }}" class="btn btn-outline-info btn-sm"
-          >Quản lý nhà hàng</a
-        >
+        <a href="{{ url_for('restaurant.dashboard') }}" class="nav-link nav-action-link">Quản lý nhà hàng</a>
         {% elif current_user.role.name == 'ADMIN' %}
-        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-info btn-sm"
-          >Quản trị</a
-        >
+        <a href="{{ url_for('admin.dashboard') }}" class="nav-link nav-action-link">Quản trị</a>
         {% endif %}
-
-        <a href="{{ url_for('auth.logout_process') }}" class="btn btn-outline-danger btn-sm"
-          >Đăng xuất</a
-        >
         {% else %}
-        <a href="{{ url_for('auth.login_view') }}" class="btn btn-primary btn-sm"
-          >Đăng nhập</a
-        >
-        <a href="{{ url_for('auth.register_view') }}" class="btn btn-hero btn-sm"
-          >Đăng ký</a
-        >
+        <a href="{{ url_for('auth.login_view') }}" class="btn btn-link nav-login">Đăng nhập</a>
+        <a href="{{ url_for('auth.register_view') }}" class="btn btn-primary btn-sm">Đăng ký</a>
         {% endif %}
 
         {% if not current_user.is_authenticated or
               current_user.role.name in ['USER', 'CUSTOMER'] %}
-        <a class="nav-link text-success fs-4 position-relative" href="{{ url_for('cart.cart_view') }}"
-          >&#128722;
+        <a class="cart-link position-relative" href="{{ url_for('cart.cart_view') }}" aria-label="Giỏ hàng">
+          <span aria-hidden="true">Giỏ hàng</span>
           <span
-            class="badge bg-danger cart-counter position-absolute top-0 start-100 translate-middle"
+            class="badge cart-counter{% if not cart_stats.total_quantity %} d-none{% endif %}"
             id="cartId"
-            data-endpoint="{{ url_for('cart.cart_stats_api') }}">{{ cart_stats.total_quantity }}</span>
+            {% if current_user.is_authenticated %}data-endpoint="{{ url_for('cart.cart_stats_api') }}"{% endif %}>{{ cart_stats.total_quantity }}</span>
         </a>
+        {% endif %}
+
+        {% if current_user.is_authenticated %}
+        <div class="dropdown user-menu">
+          <button class="btn user-menu-toggle dropdown-toggle" type="button" id="userMenu" data-bs-toggle="dropdown" aria-expanded="false">
+            <span class="user-avatar" aria-hidden="true">{{ current_user.username[:1]|upper }}</span>
+            <span class="user-name">{{ current_user.username }}</span>
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
+            <li><a class="dropdown-item" href="{{ url_for('auth.profile_view') }}">Hồ sơ cá nhân</a></li>
+            {% if current_user.role.name in ['USER', 'CUSTOMER'] %}
+            <li><a class="dropdown-item" href="{{ url_for('ai.my_reviews') }}">Đánh giá của tôi</a></li>
+            {% endif %}
+            <li><hr class="dropdown-divider" /></li>
+            <li>
+              <form method="post" action="{{ url_for('auth.logout_process') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="dropdown-item text-danger" type="submit">Đăng xuất</button>
+              </form>
+            </li>
+          </ul>
+        </div>
         {% endif %}
       </div>
     </div>
   </div>
 </nav>
+</header>

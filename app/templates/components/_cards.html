@@ -1,0 +1,60 @@
+{% macro restaurant_card(restaurant, dishes=none) %}
+<article class="restaurant-card">
+  <div class="restaurant-body">
+    <div class="restaurant-card-top">
+      <h3 class="restaurant-name">{{ restaurant.name }}</h3>
+      <span class="status-badge {{ 'status-completed' if restaurant.is_open else 'status-cancelled' }}">
+        {{ 'Mở cửa' if restaurant.is_open else 'Đóng cửa' }}
+      </span>
+    </div>
+    <p class="restaurant-desc">{{ restaurant.description or 'Nhà hàng đang cập nhật giới thiệu.' }}</p>
+    <p class="restaurant-address">{{ restaurant.address }}</p>
+    {% set display_dishes = dishes if dishes is not none else (restaurant.dishes|selectattr('is_available')|list)[:3] %}
+    {% if display_dishes %}
+    <div class="restaurant-dishes">
+      {% for dish in display_dishes %}
+      <div class="dish-row">
+        <span class="dish-name">{{ dish.name }}</span>
+        <span class="dish-price">{{ dish.price|vnd }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% elif dishes is not none %}
+    <p class="text-muted small">Không có món nào khớp từ khóa.</p>
+    {% endif %}
+    <div class="restaurant-actions">
+      <a href="{{ url_for('browse.restaurant_menu_view', restaurant_id=restaurant.id) }}"
+         class="btn btn-outline-primary btn-sm">Xem thực đơn</a>
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
+{% macro dish_card(dish, action='add', button_style='primary', show_restaurant=false) %}
+<article class="dish-card">
+  <div class="dish-card-body">
+    <h4 class="dish-card-name">{{ dish.name }}</h4>
+    {% if show_restaurant %}
+    <p class="dish-card-desc">{{ dish.restaurant.name }}</p>
+    {% else %}
+    <p class="dish-card-desc">{{ dish.description or 'Món ngon được chuẩn bị khi bạn đặt.' }}</p>
+    {% endif %}
+    <div class="dish-card-footer">
+      <span class="dish-price">{{ dish.price|vnd }}</span>
+      {% if action == 'add' %}
+        {% if not current_user.is_authenticated or current_user.role.name in ['USER', 'CUSTOMER'] %}
+        <form method="post" action="{{ url_for('cart.add_to_cart') }}">
+          <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="dish_id" value="{{ dish.id }}" />
+          <input type="hidden" name="quantity" value="1" />
+          <button class="btn btn-{{ button_style }} btn-sm" type="submit">Thêm vào giỏ</button>
+        </form>
+        {% endif %}
+      {% else %}
+      <a class="btn btn-outline-secondary btn-sm"
+         href="{{ url_for('browse.restaurant_menu_view', restaurant_id=dish.restaurant_id) }}">Xem nhà hàng</a>
+      {% endif %}
+    </div>
+  </div>
+</article>
+{% endmacro %}

@@ -1,23 +1,13 @@
 {% extends 'layout/base.html' %}
+{% from 'components/_status.html' import order_status %}
 {% block title %}Hóa Đơn Của Tôi | Food Ordering System{% endblock %}
 
 {% block content %}
 <section class="orders-page">
-  <h2 class="section-title">Hóa Đơn Của Tôi</h2>
-
-  {% set status_map = {
-    'PENDING':   ('Chờ xác nhận',  'warning text-dark'),
-    'CONFIRMED': ('Đã xác nhận',   'info'),
-    'PREPARING': ('Đang chuẩn bị', 'info'),
-    'DELIVERING':('Đang giao',     'primary'),
-    'COMPLETED': ('Hoàn thành',    'success'),
-    'CANCELLED': ('Đã hủy',        'secondary'),
-    'EXPIRED':   ('Quá hạn xác nhận', 'dark'),
-  } %}
+  <div class="section-header"><div><span class="page-eyebrow">Theo dõi hành trình món ăn</span><h1 class="section-title">Đơn hàng của tôi</h1></div></div>
 
   {% if orders %}
   {% for order in orders %}
-  {% set label, badge = status_map.get(order.status.name, (order.status.name, 'secondary')) %}
   <div class="cart-card mb-3">
     <div class="cart-card-header flex-wrap">
       <div>
@@ -26,7 +16,7 @@
           Đơn #{{ order.id }} &middot; {{ order.created_date.strftime('%H:%M %d/%m/%Y') }}
         </small>
       </div>
-      <span class="badge bg-{{ badge }}">&#9679; {{ label }}</span>
+      {{ order_status(order.status.name) }}
     </div>
 
     <div class="table-responsive">
@@ -55,11 +45,12 @@
           <tr class="collapse" id="review-{{ order.id }}-{{ item.dish_id }}">
             <td colspan="4">
               <form method="post" action="{{ url_for('ai.add_review') }}" class="row g-2 align-items-end">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="order_id" value="{{ order.id }}" />
                 <input type="hidden" name="dish_id" value="{{ item.dish_id }}" />
                 <div class="col-auto">
-                  <label class="form-label small mb-1">Đánh giá</label>
-                  <select class="form-select form-select-sm" name="rating" required>
+                  <label class="form-label small mb-1" for="rating-{{ order.id }}-{{ item.dish_id }}">Đánh giá</label>
+                  <select id="rating-{{ order.id }}-{{ item.dish_id }}" class="form-select form-select-sm" name="rating" required>
                     <option value="">Chọn</option>
                     {% for i in range(1, 6) %}
                     <option value="{{ i }}">{{ '★' * i }}</option>
@@ -67,9 +58,9 @@
                   </select>
                 </div>
                 <div class="col">
-                  <label class="form-label small mb-1">Nhận xét (tùy chọn)</label>
-                  <input class="form-control form-control-sm" type="text" name="comment"
-                         placeholder="Món ăn thế nào?" />
+                  <label class="form-label small mb-1" for="comment-{{ order.id }}-{{ item.dish_id }}">Nhận xét (tùy chọn)</label>
+                  <input id="comment-{{ order.id }}-{{ item.dish_id }}" class="form-control form-control-sm" type="text" name="comment"
+                         maxlength="1000" placeholder="Món ăn thế nào?" />
                 </div>
                 <div class="col-auto">
                   <button class="btn btn-primary btn-sm" type="submit">Gửi đánh giá</button>
@@ -84,9 +75,9 @@
     </div>
 
     <div class="order-meta px-3 py-2 text-muted small">
-      <div>&#128205; {{ order.delivery_address }}</div>
-      <div>&#128222; {{ order.phone }}</div>
-      {% if order.note %}<div>&#128221; {{ order.note }}</div>{% endif %}
+      <div><strong>Giao đến:</strong> {{ order.delivery_address }}</div>
+      <div><strong>Điện thoại:</strong> {{ order.phone }}</div>
+      {% if order.note %}<div><strong>Ghi chú:</strong> {{ order.note }}</div>{% endif %}
       {% if order.cancel_reason %}
       <div class="text-danger">Lý do hủy: {{ order.cancel_reason }}</div>
       {% endif %}
@@ -103,6 +94,15 @@
     <p>Bạn chưa có đơn hàng nào.</p>
     <a href="{{ url_for('index') }}" class="btn btn-primary">Khám phá món ngon</a>
   </div>
+  {% endif %}
+  {% if pagination and pagination.pages > 1 %}
+  <nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Phân trang đơn hàng">
+    <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_prev }}"
+       href="{{ url_for('cart.my_orders', page=pagination.prev_num) if pagination.has_prev else '#' }}">Trang trước</a>
+    <span class="text-muted small">Trang {{ pagination.page }}/{{ pagination.pages }}</span>
+    <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_next }}"
+       href="{{ url_for('cart.my_orders', page=pagination.next_num) if pagination.has_next else '#' }}">Trang sau</a>
+  </nav>
   {% endif %}
 </section>
 {% endblock %}

@@ -1,0 +1,33 @@
+{% extends 'layout/base.html' %}
+{% block title %}Kiểm tra thực đơn | Food Ordering System{% endblock %}
+{% block content %}
+<section class="restaurant-hero">
+  <span class="hero-eyebrow">Kiểm duyệt nội dung</span>
+  <h1 class="restaurant-hero-name">Thực đơn - {{ restaurant.name }}</h1>
+  <p class="restaurant-hero-desc">Màn hình giám sát chỉ đọc dành cho quản trị viên</p>
+</section>
+{% include 'admin/_nav.html' %}
+{% if dishes %}
+<div class="admin-table-wrap table-responsive">
+  <table class="table table-hover align-middle admin-table">
+    <thead><tr><th>Món</th><th>Danh mục</th><th>Giá</th><th>Trạng thái</th></tr></thead>
+    <tbody>
+    {% for dish in dishes %}
+      <tr>
+        <td>{{ dish.name }}</td>
+        <td>{{ dish.category.name }}</td>
+        <td>{{ dish.price|vnd }}</td>
+        <td>
+          {% if not dish.active %}<span class="status-badge status-deleted">Đã xóa</span>
+          {% elif dish.is_available %}<span class="status-badge status-completed">Đang bán</span>
+          {% else %}<span class="status-badge status-unavailable">Hết hàng</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state"><p>Nhà hàng chưa có món ăn.</p></div>
+{% endif %}
+{% endblock %}

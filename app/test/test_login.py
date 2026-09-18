@@ -1,4 +1,5 @@
 import pytest
+import requests
 
 from app.auth import dao as auth_dao
 from app.models import UserRole
@@ -13,7 +14,6 @@ def setup_users(test_session):
     return customer, inactive, admin
 
 
-# ---------------- DAO: auth_user ----------------
 
 def test_auth_user_success(setup_users):
     result = auth_dao.auth_user('kh1', '123456')
@@ -40,10 +40,8 @@ def test_auth_user_empty_inputs(username, password, setup_users):
     assert auth_dao.auth_user(username, password) is None
 
 
-def test_auth_user_strips_whitespace(setup_users):
-    result = auth_dao.auth_user('  kh1  ', '  123456  ')
-    assert result is not None
-    assert result.username == 'kh1'
+def test_auth_user_does_not_strip_password(setup_users):
+    assert auth_dao.auth_user('  kh1  ', '  123456  ') is None
 
 
 def test_auth_user_returns_user_object(setup_users):
@@ -51,7 +49,6 @@ def test_auth_user_returns_user_object(setup_users):
     assert auth_dao.auth_user('kh1', '123456').id == customer.id
 
 
-# ---------------- ROUTER: GET /auth/login ----------------
 
 def test_get_login_page_renders(client, app):
     res = client.get('/auth/login')
@@ -66,7 +63,6 @@ def test_get_login_redirects_when_authenticated(client, app, setup_users):
     assert res.headers['Location'] == '/'
 
 
-# ---------------- ROUTER: POST /auth/login ----------------
 
 def test_login_success_customer(client, app, setup_users):
     res = login(client, username='kh1')
@@ -112,3 +108,44 @@ def test_login_locked_account_blocked(client, app, setup_users):
                       data={'username': 'kh1', 'password': '123456'})
     assert res.status_code == 200
     assert 'bị khóa'.encode('utf-8') in res.data
+
+
+def test_google_login_clears_stale_session_when_unconfigured(
+    client, app, monkeypatch
+):
+    monkeypatch.delenv('GOOGLE_CLIENT_ID', raising=False)
+    monkeypatch.delenv('GOOGLE_CLIENT_SECRET', raising=False)
+    with client.session_transaction() as auth_session:
+        auth_session['oauth_state'] = 'stale-state'
+        auth_session['oauth_next'] = '/cart/'
+
+    response = client.get('/auth/login/google')
+
+    assert response.status_code == 302
+    with client.session_transaction() as auth_session:
+        assert 'oauth_state' not in auth_session
+        assert 'oauth_next' not in auth_session
+
+
+def test_google_callback_handles_network_error_and_clears_session(
+    client, app, monkeypatch
+):
+    monkeypatch.setenv('GOOGLE_CLIENT_ID', 'configured-client')
+    monkeypatch.setenv('GOOGLE_CLIENT_SECRET', 'configured-secret')
+    monkeypatch.setattr(
+        'app.auth.router.requests.post',
+        lambda *args, **kwargs: (_ for _ in ()).throw(requests.Timeout()),
+    )
+    with client.session_transaction() as auth_session:
+        auth_session['oauth_state'] = 'expected-state'
+        auth_session['oauth_next'] = '/cart/'
+
+    response = client.get(
+        '/auth/login/google/callback?code=code&state=expected-state'
+    )
+
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/auth/login')
+    with client.session_transaction() as auth_session:
+        assert 'oauth_state' not in auth_session
+        assert 'oauth_next' not in auth_session

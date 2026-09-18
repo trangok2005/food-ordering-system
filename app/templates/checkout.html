@@ -3,7 +3,16 @@
 
 {% block content %}
 <section class="checkout-page">
-  <h2 class="section-title">Thanh Toán</h2>
+  <div class="section-header"><div><span class="page-eyebrow">Bước cuối cùng</span><h1 class="section-title">Thanh toán</h1><p class="section-subtitle">Kiểm tra đơn hàng và thông tin giao nhận trước khi tiếp tục.</p></div></div>
+
+  {% set validation = namespace(blocked=false, gps_required=false) %}
+  {% for issue in issues %}
+    {% if 'GPS' in issue %}
+      {% set validation.gps_required = true %}
+    {% else %}
+      {% set validation.blocked = true %}
+    {% endif %}
+  {% endfor %}
 
   {% if issues %}
   <div class="alert alert-danger" role="alert">
@@ -20,6 +29,7 @@
     action="{{ url_for('cart.create_payment') }}"
     id="checkout-form"
     novalidate>
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <div class="row g-4">
       <div class="col-lg-8">
         {% for cart in carts %}
@@ -69,6 +79,8 @@
                 name="phone"
                 value="{{ current_user.phone or '' }}"
                 pattern="[0-9]{10,11}"
+                autocomplete="tel"
+                inputmode="numeric"
                 required />
               <div class="invalid-feedback">Vui lòng nhập số điện thoại 10-11 số.</div>
             </div>
@@ -81,6 +93,8 @@
                 name="address"
                 value="{{ current_user.address or '' }}"
                 placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
+                maxlength="255"
+                autocomplete="street-address"
                 required />
               <div class="invalid-feedback">Vui lòng nhập địa chỉ nhận hàng.</div>
             </div>
@@ -90,14 +104,15 @@
                 class="form-control"
                 id="note"
                 name="note"
-                rows="2"
+                rows="3"
+                maxlength="255"
                 placeholder="Ví dụ: không hành, ít cay, gọi trước khi giao..."></textarea>
             </div>
             <div class="col-12">
               <button type="button" id="use-location" class="btn btn-outline-primary btn-sm">
-                &#128205; Dùng vị trí hiện tại
+                Dùng vị trí hiện tại
               </button>
-              <small id="location-status" class="text-muted ms-2"></small>
+              <small id="location-status" class="location-status" aria-live="polite"></small>
               <input type="hidden" name="lat" id="lat" />
               <input type="hidden" name="lng" id="lng" />
             </div>
@@ -122,6 +137,7 @@
             type="button"
             id="confirm-order"
             class="btn btn-hero w-100"
+            data-blocking-issues="{{ 'true' if validation.blocked else 'false' }}"
             {{ 'disabled' if issues }}>
             Đặt hàng &amp; Thanh toán
           </button>
@@ -140,17 +156,15 @@
   {% endif %}
 </section>
 
-<!-- Cửa sổ hủy miễn phí 10 giây: khách có thể hủy trước khi chuyển sang
-     cổng thanh toán; hết 10 giây hệ thống tự động chuyển tiếp. -->
-<div class="modal fade" id="freeCancelModal" tabindex="-1" data-bs-backdrop="static">
+<div class="modal fade" id="freeCancelModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false" aria-labelledby="freeCancelTitle" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header bg-warning text-dark">
-        <h5 class="modal-title">Xác nhận đặt hàng</h5>
+        <h5 class="modal-title" id="freeCancelTitle">Xác nhận đặt hàng</h5>
       </div>
       <div class="modal-body text-center py-4">
         <p class="fs-5 mb-1">Đơn của bạn sẽ được chuyển tới cổng thanh toán sau</p>
-        <div class="display-4 fw-bold text-danger" id="cancelCountdown">10</div>
+        <div class="display-4 fw-bold text-danger" id="cancelCountdown" aria-live="polite">10</div>
         <p class="text-muted small mt-2 mb-0">
           Bạn còn <strong>10 giây hủy miễn phí</strong>. Sau khi thanh toán,
           việc hủy đơn chỉ do nhà hàng quyết định (tự hoàn tiền trực tiếp với bạn).

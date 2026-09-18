@@ -21,7 +21,6 @@ def _make_customer_with_orders():
     return customer, [o1, o2]
 
 
-# ---------------- DAO: get_user_orders ----------------
 
 def test_get_user_orders_empty(app):
     customer = make_customer()
@@ -68,7 +67,6 @@ def test_get_user_orders_includes_details(app):
     assert result[0].order_details[0].dish_id == dish.id
 
 
-# ---------------- ROUTER: /cart/my-orders ----------------
 
 def test_my_orders_requires_login(client, app):
     assert client.get('/cart/my-orders').status_code == 302

@@ -1,133 +1,168 @@
+"""Gợi ý món ăn cá nhân hóa bằng Matrix Factorization (NMF)."""
+
 from collections import defaultdict
-from datetime import datetime
+
+import numpy as np
+from sklearn.decomposition import NMF
 
 from app import db
-from app.models import (Category, Dish, OrderDetail, Order, OrderStatus,
-                        UserDishInteraction)
-
+from app.models import (
+    Dish,
+    Order,
+    OrderDetail,
+    OrderStatus,
+    Restaurant,
+    RestaurantStatus,
+    UserDishInteraction,
+)
 
 
 INTERACTION_WEIGHTS = {
     'ORDER': 3.0,
     'ADD_TO_CART': 2.0,
     'REVIEW': 2.0,
-    'VIEW': 1.0,
 }
 
 
-HOUR_WINDOW_HOURS = 2
-HOUR_MATCH_BONUS = 0.5
-
-
-CATEGORY_AFFINITY_RATIO = 0.5
-
-
-def _score_interactions(interactions):
-    dish_scores = defaultdict(float)
-    category_scores = defaultdict(float)
-    hour_map = defaultdict(set)
-
-    for it in interactions:
-        weight = INTERACTION_WEIGHTS.get(it.interaction_type, 1.0)
-        dish_scores[it.dish_id] += weight
-        hour_map[it.dish_id].add(it.hour_of_day)
-
-        dish = Dish.query.get(it.dish_id)
-        if dish and dish.category_id:
-            category_scores[dish.category_id] += weight * CATEGORY_AFFINITY_RATIO
-
-    return dish_scores, category_scores, hour_map
-
-
-def _hour_bonus(hour_map_for_dish, now_hour):
-    if not hour_map_for_dish:
-        return 0.0
-    for h in hour_map_for_dish:
-        if h is not None and abs(h - now_hour) <= HOUR_WINDOW_HOURS:
-            return HOUR_MATCH_BONUS
-    return 0.0
-
-
 def _available_query():
-    from app.models import Restaurant, RestaurantStatus
-    return (Dish.query
-            .join(Restaurant, Dish.restaurant_id == Restaurant.id)
-            .filter(Dish.active == True,
-                    Dish.is_available == True,
-                    Restaurant.status == RestaurantStatus.APPROVED,
-                    Restaurant.is_open == True))
+    return (
+        Dish.query
+        .join(Restaurant, Dish.restaurant_id == Restaurant.id)
+        .filter(
+            Dish.active.is_(True),
+            Dish.is_available.is_(True),
+            Restaurant.active.is_(True),
+            Restaurant.is_open.is_(True),
+            Restaurant.status == RestaurantStatus.APPROVED,
+        )
+    )
 
 
 def get_popular_dishes(limit=8, exclude_ids=None):
+    """Dùng món phổ biến khi chưa đủ dữ liệu."""
     exclude_ids = set(exclude_ids or [])
-    rows = (_available_query()
-            .with_entities(Dish,
-                           db.func.coalesce(db.func.sum(OrderDetail.quantity), 0)
-                           .label('total_qty'))
-            .outerjoin(OrderDetail, OrderDetail.dish_id == Dish.id)
-            .outerjoin(Order, db.and_(Order.id == OrderDetail.order_id,
-                                      Order.status.in_([OrderStatus.COMPLETED,
-                                                        OrderStatus.DELIVERING])))
-            .group_by(Dish.id)
-            .order_by(db.desc('total_qty'), Dish.name)
-            .limit(limit + len(exclude_ids))
-            .all())
-    return [dish for dish, _qty in rows if dish.id not in exclude_ids][:limit]
+    totals = (
+        db.session.query(
+            OrderDetail.dish_id.label('dish_id'),
+            db.func.sum(OrderDetail.quantity).label('total_qty'),
+        )
+        .join(Order, Order.id == OrderDetail.order_id)
+        .filter(Order.status == OrderStatus.COMPLETED)
+        .group_by(OrderDetail.dish_id)
+        .subquery()
+    )
+    rows = (
+        _available_query()
+        .with_entities(
+            Dish,
+            db.func.coalesce(totals.c.total_qty, 0).label('total_qty'),
+        )
+        .outerjoin(totals, totals.c.dish_id == Dish.id)
+        .order_by(db.desc('total_qty'), Dish.name)
+        .all()
+    )
+    return [
+        dish for dish, _quantity in rows
+        if dish.id not in exclude_ids
+    ][:limit]
+
+
+def _build_interaction_matrix():
+    """Tạo ma trận User x Dish từ các tương tác hợp lệ."""
+    interactions = UserDishInteraction.query.all()
+    valid = [
+        interaction for interaction in interactions
+        if interaction.interaction_type in INTERACTION_WEIGHTS
+    ]
+    if not valid:
+        return None
+
+    user_ids = sorted({interaction.user_id for interaction in valid})
+    dish_ids = sorted({interaction.dish_id for interaction in valid})
+    if len(user_ids) < 2 or len(dish_ids) < 2:
+        return None
+
+    user_index = {
+        user_id: index for index, user_id in enumerate(user_ids)
+    }
+    dish_index = {
+        dish_id: index for index, dish_id in enumerate(dish_ids)
+    }
+    matrix = np.zeros((len(user_ids), len(dish_ids)), dtype=float)
+
+    for interaction in valid:
+        matrix[
+            user_index[interaction.user_id],
+            dish_index[interaction.dish_id],
+        ] += INTERACTION_WEIGHTS[interaction.interaction_type]
+
+    return matrix, user_ids, dish_ids, user_index, dish_index
 
 
 def recommend_dishes_for_user(user_id, limit=8):
-    interactions = (UserDishInteraction.query
-                    .filter(UserDishInteraction.user_id == user_id)
-                    .all())
-
-    if not interactions:
+    """NMF, ko đủ dữ liệu thì dùng món phổ biến"""
+    data = _build_interaction_matrix()
+    if data is None:
         return [], get_popular_dishes(limit)
 
-    now_hour = datetime.now().hour
-    dish_scores, category_scores, hour_map = _score_interactions(interactions)
+    matrix, _user_ids, dish_ids, user_index, dish_index = data
+    if user_id not in user_index:
+        return [], get_popular_dishes(limit)
 
-    scored = []
-    seen_categories_boosted = set()
-    for dish in _available_query().all():
-        base = dish_scores.get(dish.id, 0.0)
-        affinity = category_scores.get(dish.category_id, 0.0)
-        bonus = _hour_bonus(hour_map.get(dish.id, set()), now_hour)
-
-
-        repeat_penalty = 0.5 if dish.id in dish_scores else 1.0
-        score = (base * repeat_penalty + affinity + bonus)
-
-
-        if base == 0 and affinity > 0:
-            seen_categories_boosted.add(dish.category_id)
-
-        scored.append((dish, round(score, 3)))
-
-    scored.sort(key=lambda pair: pair[1], reverse=True)
-
-    recommended = [(dish, score) for dish, score in scored[:limit]]
-    popular = get_popular_dishes(
-        limit,
-        exclude_ids=[dish.id for dish, _s in recommended],
+    model = NMF(
+        n_components=min(3, matrix.shape[0], matrix.shape[1]),
+        init='nndsvda',
+        random_state=42,
+        max_iter=500,
     )
+    user_features = model.fit_transform(matrix)
+    predicted = user_features @ model.components_
+
+    user_row = user_index[user_id]
+    user_scores = predicted[user_row]
+    interacted_ids = {
+        dish_ids[index]
+        for index, value in enumerate(matrix[user_row])
+        if value > 0
+    }
+    available_dishes = {
+        dish.id: dish for dish in _available_query().all()
+    }
+
+    recommended = []
+    for dish_id, index in dish_index.items():
+        if dish_id in interacted_ids:
+            continue
+        dish = available_dishes.get(dish_id)
+        if dish:
+            recommended.append((dish, round(float(user_scores[index]), 3)))
+
+    recommended.sort(key=lambda item: item[1], reverse=True)
+    recommended = recommended[:limit]
+    exclude_ids = interacted_ids | {
+        dish.id for dish, _score in recommended
+    }
+    popular = get_popular_dishes(limit=limit, exclude_ids=exclude_ids)
     return recommended, popular
 
 
 def get_favorite_category_names(user_id, top=3):
-    interactions = (UserDishInteraction.query
-                    .filter(UserDishInteraction.user_id == user_id)
-                    .all())
-    if not interactions:
-        return []
+    """Lấy các danh mục user tương tác nhiều nhất."""
+    interactions = UserDishInteraction.query.filter(
+        UserDishInteraction.user_id == user_id
+    ).all()
+    scores = defaultdict(float)
 
-    _, category_scores, _hm = _score_interactions(interactions)
-    if not category_scores:
-        return []
+    for interaction in interactions:
+        weight = INTERACTION_WEIGHTS.get(interaction.interaction_type)
+        if weight is None:
+            continue
+        dish = db.session.get(Dish, interaction.dish_id)
+        if dish and dish.category:
+            scores[dish.category.name] += weight
 
-    top_ids = sorted(category_scores, key=category_scores.get, reverse=True)[:top]
-    names = []
-    for cid in top_ids:
-        cat = Category.query.get(cid)
-        if cat:
-            names.append(cat.name)
-    return names
+    return [
+        name for name, _score in sorted(
+            scores.items(), key=lambda item: item[1], reverse=True
+        )[:top]
+    ]

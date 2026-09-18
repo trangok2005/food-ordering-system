@@ -3,28 +3,25 @@
 
 {% block content %}
 <div class="auth-wrapper">
-  <div class="auth-card">
-    <h2 class="auth-title">Đăng Ký</h2>
+  <div class="auth-card auth-card-wide">
+    <div class="auth-brand-mark" aria-hidden="true">T</div>
+    <h1 class="auth-title">Tạo tài khoản</h1>
+    <p class="auth-lead">Bắt đầu khám phá món ngon và đặt hàng thuận tiện.</p>
 
     {% if err_msg %}
     <div class="alert alert-danger" role="alert">{{ err_msg }}</div>
     {% endif %}
 
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    {% for message in messages %}
-    <div class="alert alert-success" role="alert">{{ message }}</div>
-    {% endfor %}
-    {% endif %}
-    {% endwith %}
-
     <form action="{{ url_for('auth.register_process') }}" method="post">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="form-floating mb-3">
         <input
           type="text"
           class="form-control"
           id="username"
           name="username"
+          minlength="3"
+          autocomplete="username"
           placeholder="Tên đăng nhập"
           required />
         <label for="username">Tên đăng nhập</label>
@@ -36,6 +33,7 @@
           class="form-control"
           id="email"
           name="email"
+          autocomplete="email"
           placeholder="Email"
           required />
         <label for="email">Email</label>
@@ -47,6 +45,7 @@
           class="form-control"
           id="full_name"
           name="full_name"
+          autocomplete="name"
           placeholder="Họ và tên" />
         <label for="full_name">Họ và tên</label>
       </div>
@@ -57,6 +56,9 @@
           class="form-control"
           id="phone"
           name="phone"
+          autocomplete="tel"
+          inputmode="numeric"
+          pattern="[0-9]{10,11}"
           placeholder="Số điện thoại" />
         <label for="phone">Số điện thoại</label>
       </div>
@@ -67,6 +69,7 @@
           class="form-control"
           id="address"
           name="address"
+          autocomplete="street-address"
           placeholder="Địa chỉ" />
         <label for="address">Địa chỉ</label>
       </div>
@@ -77,6 +80,8 @@
           class="form-control"
           id="password"
           name="password"
+          minlength="6"
+          autocomplete="new-password"
           placeholder="Mật khẩu"
           required />
         <label for="password">Mật khẩu</label>
@@ -88,13 +93,15 @@
           class="form-control"
           id="confirm"
           name="confirm"
+          minlength="6"
+          autocomplete="new-password"
           placeholder="Xác nhận mật khẩu"
           required />
         <label for="confirm">Xác nhận mật khẩu</label>
       </div>
 
       <button class="btn btn-primary w-100 btn-auth mb-3" type="submit">
-        ĐĂNG KÝ
+        Tạo tài khoản
       </button>
 
       <div class="text-center mt-4">
@@ -104,69 +111,4 @@
     </form>
   </div>
 </div>
-{% endblock %}
-
-{% block style %}
-<style>
-  .auth-wrapper {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 70vh;
-    padding: 2rem;
-  }
-
-  .auth-card {
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
-    padding: 2.5rem;
-    width: 100%;
-    max-width: 480px;
-  }
-
-  .auth-title {
-    font-family: 'Playfair Display', serif;
-    font-weight: 700;
-    text-align: center;
-    color: #2c3e50;
-    margin-bottom: 1.5rem;
-  }
-
-  .btn-auth {
-    padding: 0.85rem;
-    font-size: 1.05rem;
-    font-weight: 600;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #e67e22, #d35400);
-    border: none;
-    transition: all 0.3s ease;
-  }
-
-  .btn-auth:hover {
-    background: linear-gradient(135deg, #d35400, #e67e22);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(230, 126, 34, 0.4);
-  }
-
-  .auth-link {
-    color: #e67e22;
-    text-decoration: none;
-    transition: color 0.2s;
-  }
-
-  .auth-link:hover {
-    color: #d35400;
-    text-decoration: underline;
-  }
-
-  .form-floating > label {
-    color: #6c757d;
-  }
-
-  .form-control:focus {
-    border-color: #e67e22;
-    box-shadow: 0 0 0 0.2rem rgba(230, 126, 34, 0.25);
-  }
-</style>
 {% endblock %}

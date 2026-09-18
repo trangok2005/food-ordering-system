@@ -1,8 +1,27 @@
 (function () {
-  const badge = document.getElementById("cartId");
-  if (!badge) return;
+  "use strict";
 
-  const endpoint = badge.dataset.endpoint || "/cart/api/stats";
+  document.addEventListener("submit", function (event) {
+    const form = event.target.closest("form[data-confirm]");
+    if (form && !window.confirm(form.dataset.confirm)) event.preventDefault();
+  });
+
+  document.querySelectorAll("[data-geolocation]").forEach(function (element) {
+    window.TvTFood.initGeolocation({
+      button: "#" + element.id,
+      status: element.dataset.status,
+      latitude: element.dataset.latitude,
+      longitude: element.dataset.longitude,
+      precision: element.dataset.precision ? Number(element.dataset.precision) : null,
+      successMessage: element.dataset.success,
+      errorMessage: element.dataset.error,
+    });
+  });
+
+  const badge = document.getElementById("cartId");
+  if (!badge || !badge.dataset.endpoint) return;
+
+  const endpoint = badge.dataset.endpoint;
 
   function render(quantity) {
     badge.textContent = quantity;

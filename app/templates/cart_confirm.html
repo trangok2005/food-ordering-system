@@ -3,10 +3,10 @@
 
 {% block content %}
 <section class="cart-page">
-  <h2 class="section-title">Giỏ hàng đang có món nhà hàng khác</h2>
+  <div class="section-header"><div><span class="page-eyebrow">Xác nhận thay đổi</span><h1 class="section-title">Đổi nhà hàng trong giỏ</h1></div></div>
 
   <div class="cart-card">
-    <div class="empty-state">
+    <div class="empty-state border-0">
       <p>
         Giỏ hàng của bạn đang chứa món của
         <strong>{{ current_restaurant.name }}</strong>.
@@ -17,6 +17,7 @@
 
     <div class="cart-checkout">
       <form method="post" action="{{ url_for('cart.confirm_switch') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="dish_id" value="{{ dish_id }}" />
         <input type="hidden" name="quantity" value="{{ quantity }}" />
         <input type="hidden" name="return_url" value="{{ return_url or '' }}" />

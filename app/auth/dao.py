@@ -1,13 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import secrets
 
+from sqlalchemy import delete, or_, update
 from sqlalchemy.exc import IntegrityError
-from werkzeug.security import generate_password_hash, check_password_hash
-from app import db
-from app.models import User, UserRole, OAuthAccount, AuthProvider
-
-
-RESET_TOKEN_MINUTES = 30
+from app.extensions import db
+from app.models import (
+    AuthProvider,
+    OAuthAccount,
+    PasswordResetToken,
+    User,
+    UserRole,
+)
 
 
 def get_user_by_id(user_id):
@@ -20,6 +23,20 @@ def get_user_by_username(username):
 
 def get_user_by_email(email):
     return User.query.filter(User.email == email.strip()).first()
+
+
+def get_reset_user(identifier):
+    identifier = (identifier or '').strip()
+    if not identifier:
+        return None
+    return (
+        User.query
+        .filter(
+            User.active.is_(True),
+            or_(User.username == identifier, User.email == identifier),
+        )
+        .first()
+    )
 
 
 def get_user_by_oauth(provider, provider_uid):
@@ -43,9 +60,12 @@ def _unique_username_from_email(email):
 
 
 def get_or_create_google_user(provider_uid, email, full_name=None, avatar=None):
-    """Liên kết Google với tài khoản cùng email hoặc tạo tài khoản mới."""
     provider_uid = str(provider_uid)
-    email = (email or '').strip()
+    email = (email or '').strip().lower()
+    if not provider_uid or not _is_valid_email(email):
+        raise ValueError('Thông tin tài khoản Google không hợp lệ')
+    full_name = (full_name or '').strip()[:100] or None
+    avatar = (avatar or '').strip()[:255] or None
 
     account = (
         OAuthAccount.query
@@ -68,8 +88,8 @@ def get_or_create_google_user(provider_uid, email, full_name=None, avatar=None):
     user = User(
         username=_unique_username_from_email(email),
         email=email,
-        full_name=full_name or None,
-        avatar=avatar or None,
+        full_name=full_name,
+        avatar=avatar,
         role=UserRole.CUSTOMER,
     )
     user.set_password(secrets.token_urlsafe(24))
@@ -89,7 +109,6 @@ def auth_user(username, password):
         return None
 
     username = username.strip()
-    password = password.strip()
     user = get_user_by_username(username)
     if user and user.active and user.check_password(password):
         return user
@@ -109,10 +128,16 @@ def update_profile(user, data):
     if phone and (not phone.isdigit() or not (10 <= len(phone) <= 11)):
         raise ValueError('Số điện thoại phải từ 10 đến 11 ký số')
 
-    user.full_name = (data.get('full_name') or '').strip() or None
+    full_name = (data.get('full_name') or '').strip()
+    address = (data.get('address') or '').strip()
+    avatar = (data.get('avatar') or '').strip()
+    if len(full_name) > 100 or len(address) > 255 or len(avatar) > 255:
+        raise ValueError('Thông tin hồ sơ vượt quá độ dài cho phép')
+
+    user.full_name = full_name or None
     user.phone = phone or None
-    user.address = (data.get('address') or '').strip() or None
-    user.avatar = (data.get('avatar') or '').strip() or None
+    user.address = address or None
+    user.avatar = avatar or None
     db.session.commit()
     return user
 
@@ -123,62 +148,108 @@ def change_password(user, current_password, new_password, confirm_password):
             'Tài khoản Google chưa đặt mật khẩu nội bộ, '
             'hãy dùng chức năng quên mật khẩu'
         )
-    if not user.check_password((current_password or '').strip()):
+    if not user.check_password(current_password or ''):
         raise ValueError('Mật khẩu hiện tại không đúng')
     if (new_password or '') != (confirm_password or ''):
         raise ValueError('Mật khẩu mới không khớp')
     _validate_new_password(new_password)
 
-    user.set_password(new_password.strip())
+    user.set_password(new_password)
     db.session.commit()
 
 
 def _validate_new_password(new_password):
-    new_password = (new_password or '').strip()
+    new_password = new_password or ''
     if len(new_password) < 6:
         raise ValueError('Password tối thiểu 6 ký tự')
+    if len(new_password) > 128:
+        raise ValueError('Password tối đa 128 ký tự')
 
 
-def create_reset_token(username_or_email):
-    """Tạo token đặt lại mật khẩu, hết hạn sau 30 phút."""
-    raw = (username_or_email or '').strip()
-    if not raw:
-        return None, None
+def replace_reset_token(user_id, token_digest, expires_at):
+    """Xóa token cũ và chỉ lưu mã băm."""
+    db.session.execute(
+        delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
+    )
+    db.session.add(PasswordResetToken(
+        user_id=user_id,
+        token_digest=token_digest,
+        expires_at=expires_at,
+    ))
+    db.session.commit()
 
-    user = get_user_by_username(raw) or get_user_by_email(raw)
-    if not user:
-        return None, None
 
-    token = secrets.token_urlsafe(32)
-    user.reset_token = token
-    user.reset_token_expires = datetime.now() + timedelta(
-        minutes=RESET_TOKEN_MINUTES
+def invalidate_reset_token(token_digest):
+    db.session.execute(
+        delete(PasswordResetToken).where(
+            PasswordResetToken.token_digest == token_digest
+        )
     )
     db.session.commit()
-    return user, token
 
 
-def reset_password(token, new_password, confirm_password):
-    """Đặt lại mật khẩu bằng token còn hạn và chỉ dùng một lần."""
-    if not token:
+def valid_reset_token_digest(token_digest):
+    if not token_digest:
+        return False
+    now = datetime.now()
+    return db.session.query(
+        PasswordResetToken.query.filter(
+            PasswordResetToken.token_digest == token_digest,
+            PasswordResetToken.consumed_at.is_(None),
+            PasswordResetToken.expires_at > now,
+        ).exists()
+    ).scalar()
+
+
+def reset_password(token_digest, new_password, confirm_password):
+    """Dùng token một lần rồi đổi mật khẩu trong cùng giao dịch."""
+    if not token_digest:
         raise ValueError('Link đặt lại mật khẩu không hợp lệ')
     if (new_password or '') != (confirm_password or ''):
         raise ValueError('Mật khẩu mới không khớp')
     _validate_new_password(new_password)
 
-    user = User.query.filter(User.reset_token == token.strip()).first()
-    if not user:
-        raise ValueError('Link đặt lại mật khẩu không hợp lệ hoặc đã được dùng')
-    if not user.reset_token_expires or datetime.now() > user.reset_token_expires:
-        raise ValueError('Link đặt lại mật khẩu đã hết hạn, vui lòng yêu cầu link mới')
+    now = datetime.now()
+    try:
+        reset_token = (
+            PasswordResetToken.query
+            .filter(PasswordResetToken.token_digest == token_digest)
+            .with_for_update()
+            .first()
+        )
+        if not reset_token:
+            raise ValueError('Link đặt lại mật khẩu không hợp lệ hoặc đã được dùng')
 
-    user.set_password(new_password.strip())
-    user.reset_token = None
-    user.reset_token_expires = None
-    user.failed_login_count = 0
-    user.locked_until = None
-    db.session.commit()
-    return user
+        consumed = db.session.execute(
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.id == reset_token.id,
+                PasswordResetToken.consumed_at.is_(None),
+                PasswordResetToken.expires_at > now,
+            )
+            .values(consumed_at=now)
+        )
+        if consumed.rowcount != 1:
+            raise ValueError(
+                'Link đặt lại mật khẩu không hợp lệ, đã hết hạn hoặc đã được dùng'
+            )
+
+        user = reset_token.user
+        user.set_password(new_password)
+        user.failed_login_count = 0
+        user.locked_until = None
+        db.session.commit()
+        return user
+    except Exception:
+        db.session.rollback()
+        raise
+
+
+def _is_valid_email(email):
+    if not email or len(email) > 255 or email.count('@') != 1:
+        return False
+    local, domain = email.rsplit('@', 1)
+    return bool(local and '.' in domain and not domain.startswith('.'))
 
 
 def add_user(
@@ -186,15 +257,13 @@ def add_user(
     role=UserRole.CUSTOMER,
 ):
     username = username.strip()
-    if len(username) < 3:
-        raise ValueError('Username tối thiểu 3 ký tự')
+    if not 3 <= len(username) <= 255:
+        raise ValueError('Username phải từ 3 đến 255 ký tự')
 
-    password = password.strip()
-    if len(password) < 6:
-        raise ValueError('Password tối thiểu 6 ký tự')
+    _validate_new_password(password)
 
-    email = email.strip()
-    if '@' not in email:
+    email = email.strip().lower()
+    if not _is_valid_email(email):
         raise ValueError('Email không hợp lệ')
 
     if phone:

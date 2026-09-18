@@ -1,14 +1,13 @@
-{# Trường dùng chung cho form thêm/sửa món ăn.
-   Khi sửa: truyền dish_data là object Dish để điền sẵn giá trị. #}
+{# dùng dish_data khi sửa món #}
 <div class="mb-3">
-  <label class="form-label">Tên món <span class="text-danger">*</span></label>
-  <input type="text" name="name" class="form-control" required maxlength="255"
+  <label class="form-label" for="dish-name-{{ dish_data.id if dish_data else 'new' }}">Tên món <span class="text-danger">*</span></label>
+  <input id="dish-name-{{ dish_data.id if dish_data else 'new' }}" type="text" name="name" class="form-control" required maxlength="255"
          value="{% if dish_data %}{{ dish_data.name }}{% endif %}" />
 </div>
 <div class="row">
   <div class="col-md-6 mb-3">
-    <label class="form-label">Danh mục <span class="text-danger">*</span></label>
-    <select name="category_id" class="form-select" required>
+    <label class="form-label" for="dish-category-{{ dish_data.id if dish_data else 'new' }}">Danh mục <span class="text-danger">*</span></label>
+    <select id="dish-category-{{ dish_data.id if dish_data else 'new' }}" name="category_id" class="form-select" required>
       {% for category in categories %}
       <option value="{{ category.id }}"
               {% if dish_data and dish_data.category_id == category.id %}selected{% endif %}>
@@ -18,18 +17,18 @@
     </select>
   </div>
   <div class="col-md-6 mb-3">
-    <label class="form-label">Giá bán (VNĐ) <span class="text-danger">*</span></label>
-    <input type="number" name="price" class="form-control" required min="0" step="1000"
+    <label class="form-label" for="dish-price-{{ dish_data.id if dish_data else 'new' }}">Giá bán (VNĐ) <span class="text-danger">*</span></label>
+    <input id="dish-price-{{ dish_data.id if dish_data else 'new' }}" type="number" name="price" class="form-control" required min="1" step="1000"
            value="{% if dish_data %}{{ dish_data.price }}{% endif %}" />
   </div>
 </div>
 <div class="mb-3">
-  <label class="form-label">Mô tả</label>
-  <textarea name="description" class="form-control" rows="2"
+  <label class="form-label" for="dish-description-{{ dish_data.id if dish_data else 'new' }}">Mô tả</label>
+  <textarea id="dish-description-{{ dish_data.id if dish_data else 'new' }}" name="description" class="form-control" rows="3"
             maxlength="500">{% if dish_data and dish_data.description %}{{ dish_data.description }}{% endif %}</textarea>
 </div>
 <div class="mb-3">
-  <label class="form-label">Link hình ảnh</label>
-  <input type="url" name="image" class="form-control" placeholder="https://..."
+  <label class="form-label" for="dish-image-{{ dish_data.id if dish_data else 'new' }}">Link hình ảnh</label>
+  <input id="dish-image-{{ dish_data.id if dish_data else 'new' }}" type="url" name="image" class="form-control" placeholder="https://..."
          value="{% if dish_data and dish_data.image %}{{ dish_data.image }}{% endif %}" />
 </div>

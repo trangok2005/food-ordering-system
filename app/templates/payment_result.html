@@ -4,7 +4,7 @@
 {% block content %}
 <section class="payment-result">
   {% if success %}
-  <div class="payment-icon payment-success">&#10004;</div>
+  <div class="payment-icon payment-success" aria-hidden="true">&#10004;</div>
   <h2 class="section-title">Thanh toán thành công!</h2>
   <p class="section-subtitle">
     Cảm ơn bạn đã đặt hàng. Đơn hàng đã được thanh toán qua payOS và đang chờ nhà hàng xác nhận.
@@ -51,7 +51,7 @@
   </div>
 
   {% else %}
-  <div class="payment-icon payment-failed">&#10007;</div>
+  <div class="payment-icon payment-failed" aria-hidden="true">&#10007;</div>
   <h2 class="section-title">Thanh toán không thành công</h2>
   <p class="section-subtitle">
     {% if status == 'CANCELLED' %}

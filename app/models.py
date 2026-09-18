@@ -1,12 +1,12 @@
 from flask import Flask
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Numeric
 from sqlalchemy import Text, Boolean, DateTime, Enum
 from sqlalchemy.orm import relationship
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import enum
-from app import db
+from app.extensions import db
 from app.utils import haversine_km
 
 
@@ -15,12 +15,6 @@ class BaseModel(db.Model):
     id = Column(Integer, primary_key=True, autoincrement=True)
     active = Column(Boolean, default=True)
 
-
-# ĐĂNG KÝ / ĐĂNG NHẬP / QUẢN LÝ TÀI KHOẢN
-#    - 2 phương thức đăng nhập: nội bộ (username/password) và OAuth
-#      (Google) qua bảng OAuthAccount.
-#    - Bảo mật: mật khẩu được hash (werkzeug), giới hạn số lần đăng
-#      nhập sai bằng failed_login_count + locked_until.
 
 class UserRole(enum.Enum):
     USER = 'User'
@@ -48,11 +42,9 @@ class User(BaseModel, UserMixin):
     failed_login_count = Column(Integer, default=0)
     locked_until = Column(DateTime, nullable=True)
 
-    # quên mật khẩu: token một lần, hết hạn sau 30 phút
-    reset_token = Column(String(100), nullable=True, index=True)
-    reset_token_expires = Column(DateTime, nullable=True)
-
     oauth_accounts = relationship('OAuthAccount', backref='user', lazy=True, cascade='all, delete-orphan')
+    reset_tokens = relationship('PasswordResetToken', back_populates='user', lazy=True,
+                                cascade='all, delete-orphan')
     restaurant = relationship('Restaurant', backref='owner', uselist=False, lazy=True)
     carts = relationship('Cart', backref='user', lazy=True, cascade='all, delete-orphan')
     orders = relationship('Order', backref='user', lazy=True)
@@ -79,6 +71,18 @@ class User(BaseModel, UserMixin):
 
     def __str__(self):
         return self.username
+
+
+class PasswordResetToken(db.Model):
+    __tablename__ = 'password_reset_token'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token_digest = Column(String(64), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    consumed_at = Column(DateTime, nullable=True)
+    user_id = Column(Integer, ForeignKey(User.id), nullable=False, unique=True)
+
+    user = relationship('User', back_populates='reset_tokens')
 
 
 class OAuthAccount(BaseModel):
@@ -127,15 +131,22 @@ class Restaurant(BaseModel):
     status = Column(Enum(RestaurantStatus), default=RestaurantStatus.PENDING)
 
     confirm_timeout_minutes = Column(Integer, default=5)
-    min_order_amount = Column(Float, nullable=True)          # ghi đè giá trị mặc định của hệ thống
+    min_order_amount = Column(Numeric(12, 2), nullable=True)  # ghi đè giá trị mặc định của hệ thống
     delivery_radius_km = Column(Float, default=10)           # bán kính giao hàng, tùy chỉnh theo nhà hàng
     max_quantity_per_item = Column(Integer, nullable=True)   # ghi đè số lượng tối đa 1 món/đơn (mặc định hệ thống)
 
-    owner_id = Column(Integer, ForeignKey(User.id), nullable=False)
+    owner_id = Column(Integer, ForeignKey(User.id), nullable=False, unique=True)
 
     categories = relationship('Category', backref='restaurant', lazy=True, cascade='all, delete-orphan')
     dishes = relationship('Dish', backref='restaurant', lazy=True, cascade='all, delete-orphan')
     orders = relationship('Order', backref='restaurant', lazy=True)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            'min_order_amount IS NULL OR min_order_amount >= 0',
+            name='chk_restaurant_min_order_nonnegative',
+        ),
+    )
 
     def is_within_delivery_radius(self, lat, lng):
         """Kiểm tra tọa độ (lat, lng) có nằm trong bán kính giao hàng của
@@ -190,18 +201,14 @@ class Dish(BaseModel):
     reviews = relationship('Review', backref='dish', lazy=True)
     interactions = relationship('UserDishInteraction', backref='dish', lazy=True)
 
+    __table_args__ = (
+        db.CheckConstraint('price >= 0', name='chk_dish_price_nonnegative'),
+    )
+
     def __str__(self):
         return self.name
 
 
-# 3. GIỎ HÀNG
-#    - Gắn với tài khoản đã đăng nhập (user_id NOT NULL).
-#    - Mỗi cart chỉ thuộc 1 nhà hàng. Ràng buộc UNIQUE là cặp
-#      (user_id, restaurant_id) chứ KHÔNG phải riêng user_id, vì một
-#      user có thể có nhiều cart ở các thời điểm khác nhau (nhưng
-#      không được có 2 cart cùng lúc cho cùng 1 nhà hàng).
-#    - Món hết hàng vẫn hiển thị trong giỏ, chỉ được kiểm tra và
-#      chặn ở bước thanh toán.
 
 class Cart(BaseModel):
     __tablename__ = 'cart'
@@ -213,7 +220,7 @@ class Cart(BaseModel):
     items = relationship('CartItem', backref='cart', lazy=True, cascade='all, delete-orphan')
 
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'restaurant_id', name='uq_cart_user_restaurant'),
+        db.UniqueConstraint('user_id', name='uq_cart_user'),
     )
 
     def total_amount(self):
@@ -232,6 +239,7 @@ class CartItem(BaseModel):
 
     __table_args__ = (
         db.UniqueConstraint('cart_id', 'dish_id', name='uq_cart_dish'),
+        db.CheckConstraint('quantity > 0', name='chk_cart_item_quantity_positive'),
     )
 
 
@@ -258,7 +266,49 @@ class PaymentStatus(enum.Enum):
     UNPAID = 'Unpaid'
     PAID = 'Paid'
     FAILED = 'Failed'
-    REFUNDED = 'Refunded'
+
+
+class PaymentAttemptStatus:
+    CREATING = 'CREATING'
+    CREATED = 'CREATED'
+    PAID_PENDING_FINALIZE = 'PAID_PENDING_FINALIZE'
+    FINALIZED = 'FINALIZED'
+    FINALIZE_FAILED = 'FINALIZE_FAILED'
+    FAILED = 'FAILED'
+    CANCELLED = 'CANCELLED'
+    EXPIRED = 'EXPIRED'
+
+
+class PaymentAttempt(BaseModel):
+    __tablename__ = 'payment_attempt'
+
+    order_code = Column(String(30), nullable=False, unique=True)
+    payment_request_id = Column(String(255), nullable=True, unique=True)
+    amount = Column(Integer, nullable=False)
+    payload = Column(Text, nullable=False)
+    snapshot_hash = Column(String(64), nullable=False, index=True)
+    snapshot_key = Column(String(64), nullable=True, unique=True)
+    status = Column(String(32), default='CREATING', nullable=False)
+    checkout_url = Column(String(1000), nullable=True)
+    error_code = Column(String(50), nullable=True)
+    last_error = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    result_order_ids = Column(String(255), nullable=True)
+    created_date = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now,
+                        nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+    user_id = Column(Integer, ForeignKey(User.id), nullable=False, index=True)
+
+    __table_args__ = (
+        db.CheckConstraint('amount > 0', name='chk_payment_attempt_amount_positive'),
+        db.CheckConstraint('retry_count >= 0', name='chk_payment_attempt_retry_nonnegative'),
+        db.CheckConstraint(
+            "status IN ('CREATING', 'CREATED', 'PAID_PENDING_FINALIZE', "
+            "'FINALIZED', 'FINALIZE_FAILED', 'FAILED', 'CANCELLED', 'EXPIRED')",
+            name='chk_payment_attempt_status',
+        ),
+    )
 
 
 class Order(BaseModel):
@@ -271,7 +321,7 @@ class Order(BaseModel):
     phone = Column(String(11), nullable=False)
     note = Column(String(255))
 
-    total_amount = Column(Float, default=0)
+    total_amount = Column(Numeric(12, 2), default=0, nullable=False)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING, nullable=False)
 
     payment_method = Column(Enum(PaymentMethod), default=PaymentMethod.ONLINE, nullable=False)
@@ -294,8 +344,18 @@ class Order(BaseModel):
 
     user_id = Column(Integer, ForeignKey(User.id), nullable=False)
     restaurant_id = Column(Integer, ForeignKey(Restaurant.id), nullable=False)
+    payment_attempt_id = Column(
+        Integer, ForeignKey(PaymentAttempt.id), nullable=True, unique=True
+    )
 
     order_details = relationship('OrderDetail', backref='order', lazy=True, cascade='all, delete-orphan')
+
+    __table_args__ = (
+        db.Index('ix_order_restaurant_status_deadline',
+                 'restaurant_id', 'status', 'confirm_deadline'),
+        db.Index('ix_order_user_created', 'user_id', 'created_date'),
+        db.CheckConstraint('total_amount >= 0', name='chk_order_total_nonnegative'),
+    )
 
     def set_confirm_deadline(self):
         timeout = self.restaurant.confirm_timeout_minutes if self.restaurant else 5
@@ -314,12 +374,6 @@ class Order(BaseModel):
         self.cancel_reason = reason
         self.cancelled_at = datetime.now()
 
-    def mark_refunded_manually(self):
-        """Đánh dấu đã hoàn tiền, dùng SAU KHI nhà hàng đã tự chuyển
-        khoản hoàn tiền cho khách ngoài hệ thống. Chỉ để lưu vết/đối
-        soát nội bộ, không gọi API chuyển tiền thật."""
-        self.payment_status = PaymentStatus.REFUNDED
-
     def __str__(self):
         return f"Order #{self.id}"
 
@@ -331,6 +385,11 @@ class OrderDetail(BaseModel):
     dish_id = Column(Integer, ForeignKey(Dish.id), nullable=False)
     quantity = Column(Integer, default=1, nullable=False)
     unit_price = Column(Integer, nullable=False)     # snapshot giá dish.price tại thời điểm đặt
+
+    __table_args__ = (
+        db.CheckConstraint('quantity > 0', name='chk_order_detail_quantity_positive'),
+        db.CheckConstraint('unit_price >= 0', name='chk_order_detail_price_nonnegative'),
+    )
 
 
 # 6. TÍNH NĂNG THÔNG MINH (AI)
@@ -364,6 +423,7 @@ class Review(BaseModel):
 
     __table_args__ = (
         db.CheckConstraint('rating >= 1 AND rating <= 5', name='chk_rating_range'),
+        db.UniqueConstraint('order_id', 'dish_id', name='uq_review_order_dish'),
     )
 
 
@@ -374,6 +434,7 @@ class DishPairing(BaseModel):
     paired_dish_id = Column(Integer, ForeignKey(Dish.id), nullable=False)
     support = Column(Float, default=0)
     confidence = Column(Float, default=0)
+    lift = Column(Float, default=0)
 
     dish = relationship('Dish', foreign_keys=[dish_id])
     paired_dish = relationship('Dish', foreign_keys=[paired_dish_id])
@@ -408,7 +469,7 @@ class SystemConfig(db.Model):
 
     @staticmethod
     def get(key, default=None, cast=str):
-        cfg = SystemConfig.query.get(key)
+        cfg = db.session.get(SystemConfig, key)
         if not cfg:
             return default
         return cast(cfg.value)

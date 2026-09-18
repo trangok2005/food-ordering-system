@@ -1,4 +1,5 @@
-from sqlalchemy import or_
+from sqlalchemy import and_, case, or_
+from sqlalchemy.orm import selectinload
 
 from app.models import (
     Restaurant,
@@ -7,51 +8,48 @@ from app.models import (
     SystemConfig
 )
 
+
 def _page_size():
-    # Lấy số lượng kết quả hiển thị trên mỗi trang.
-    # Nếu chưa cấu hình thì mặc định là 24.
-    return SystemConfig.get(
-        'SEARCH_PAGE_SIZE',
-        24,
-        cast=int
-    )
+    return SystemConfig.get('SEARCH_PAGE_SIZE', 24, cast=int)
 
 
-def search(keyword, page=1):
-    """
-    Tìm nhà hàng theo từ khóa.
-
-    Từ khóa được tìm trong:
-    - Tên nhà hàng
-    - Tên món ăn
-    """
-
-    # Xóa khoảng trắng thừa ở đầu và cuối keyword
+def search(keyword, page=1, sort='relevance'):
     kw = (keyword or '').strip()
 
-    # Không có keyword thì không tìm kiếm
     if not kw:
         return None
 
+    like = f'%{kw}%'
+    dish_match = and_(
+        Dish.name.ilike(like),
+        Dish.active.is_(True),
+        Dish.is_available.is_(True),
+    )
     query = (
         Restaurant.query
-        .outerjoin(
-            Dish,
-            Dish.restaurant_id == Restaurant.id
-        )
+        .options(selectinload(Restaurant.dishes))
+        .outerjoin(Dish, Dish.restaurant_id == Restaurant.id)
         .filter(
             Restaurant.status == RestaurantStatus.APPROVED,
-            Restaurant.active == True,
+            Restaurant.active.is_(True),
             or_(
-                Restaurant.name.ilike(f'%{kw}%'),
-                Dish.name.ilike(f'%{kw}%')
+                Restaurant.name.ilike(like),
+                dish_match,
             )
         )
-        # Tránh một nhà hàng xuất hiện nhiều lần
-        # khi có nhiều món ăn cùng khớp keyword.
+        # nhiều món khớp vẫn chỉ lấy nhà hàng một lần
         .distinct()
-        .order_by(Restaurant.name)
     )
+
+    if sort == 'name_desc':
+        query = query.order_by(Restaurant.name.desc())
+    elif sort == 'name_asc':
+        query = query.order_by(Restaurant.name.asc())
+    else:
+        query = query.order_by(
+            case((Restaurant.name.ilike(like), 0), else_=1),
+            Restaurant.name.asc(),
+        )
 
     return query.paginate(
         page=page,
@@ -59,9 +57,8 @@ def search(keyword, page=1):
         error_out=False
     )
 
+
 def get_approved_restaurant(restaurant_id):
-    # Chỉ lấy nhà hàng đã được duyệt
-    # và đang hoạt động.
     return (
         Restaurant.query
         .filter(
@@ -72,11 +69,8 @@ def get_approved_restaurant(restaurant_id):
         .first()
     )
 
+
 def get_restaurant_menu(restaurant_id):
-    # Chỉ lấy những món:
-    # - Thuộc nhà hàng
-    # - Đang hoạt động
-    # - Đang có sẵn để bán
     return (
         Dish.query
         .filter(
@@ -84,9 +78,6 @@ def get_restaurant_menu(restaurant_id):
             Dish.active == True,
             Dish.is_available == True
         )
-        .order_by(
-            Dish.category_id,
-            Dish.name
-        )
+        .order_by(Dish.category_id, Dish.name)
         .all()
     )

@@ -6,7 +6,6 @@ from app.models import User, UserRole
 from app.test.test_base import app, client, test_session, make_user
 
 
-# ---------------- DAO: add_user ----------------
 
 def test_register_success(test_session):
     auth_dao.add_user(username='demo1', password='123ABC123',
@@ -87,7 +86,6 @@ def test_full_name_stored(test_session):
     assert User.query.filter_by(username='demo1').first().full_name == 'Nguyen Van A'
 
 
-# ---------------- ROUTER: /auth/register ----------------
 
 def test_get_register_page(client, app):
     assert client.get('/auth/register').status_code == 200

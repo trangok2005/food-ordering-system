@@ -1,14 +1,16 @@
 {% extends 'layout/base.html' %}
+{% from 'components/_cards.html' import dish_card with context %}
 {% block title %}{{ restaurant.name }} | Food Ordering System{% endblock %}
 
 {% block content %}
 <section class="restaurant-hero">
-  <h2 class="restaurant-hero-name">{{ restaurant.name }}</h2>
+  <span class="hero-eyebrow">Thực đơn nhà hàng</span>
+  <h1 class="restaurant-hero-name">{{ restaurant.name }}</h1>
   <p class="restaurant-hero-desc">{{ restaurant.description }}</p>
   <p class="restaurant-address">
-    &#128205; {{ restaurant.address }} &middot; &#128222; {{ restaurant.phone }}
+    {{ restaurant.address }} &middot; <a class="text-white" href="tel:{{ restaurant.phone }}">{{ restaurant.phone }}</a>
   </p>
-  <span class="badge bg-success">{{ 'Mở cửa' if restaurant.is_open else 'Đóng cửa' }}</span>
+  <span class="status-badge {{ 'status-completed' if restaurant.is_open else 'status-cancelled' }}">{{ 'Mở cửa' if restaurant.is_open else 'Đóng cửa' }}</span>
 </section>
 
 <section class="menu">
@@ -21,23 +23,7 @@
     <div class="row g-4">
       {% for dish in dishes %}
       <div class="col-md-6 col-lg-4">
-        <div class="dish-card">
-          <div class="dish-card-body">
-            <h4 class="dish-card-name">{{ dish.name }}</h4>
-            <p class="dish-card-desc">{{ dish.description }}</p>
-            <div class="dish-card-footer">
-              <span class="dish-price">{{ dish.price|vnd }}</span>
-              {% if not current_user.is_authenticated or
-                    current_user.role.name in ['USER', 'CUSTOMER'] %}
-              <form method="post" action="{{ url_for('cart.add_to_cart') }}">
-                <input type="hidden" name="dish_id" value="{{ dish.id }}" />
-                <input type="hidden" name="quantity" value="1" />
-                <button class="btn btn-primary btn-sm" type="submit">Thêm vào giỏ</button>
-              </form>
-              {% endif %}
-            </div>
-          </div>
-        </div>
+        {{ dish_card(dish) }}
       </div>
       {% endfor %}
     </div>

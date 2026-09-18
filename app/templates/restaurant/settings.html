@@ -12,6 +12,7 @@
 <div class="row justify-content-center">
   <div class="col-lg-8">
     <form method="post" class="cart-card">
+      <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
       <div class="cart-card-header">
         <h3 class="cart-restaurant">Thông tin &amp; cấu hình</h3>
       </div>
@@ -102,10 +103,14 @@
           </div>
 
           <div class="col-12">
-            <button type="button" id="use-location" class="btn btn-outline-primary btn-sm">
-              &#128205; Dùng vị trí hiện tại
+            <button type="button" id="use-location" class="btn btn-outline-primary btn-sm"
+                    data-geolocation data-status="#location-status" data-latitude="#latitude"
+                    data-longitude="#longitude"
+                    data-success="Đã lấy vị trí nhà hàng."
+                    data-error="Không lấy được vị trí. Bạn có thể nhập tay kinh độ/vĩ độ.">
+              Dùng vị trí hiện tại
             </button>
-            <small id="location-status" class="text-muted ms-2"></small>
+            <small id="location-status" class="location-status" aria-live="polite"></small>
           </div>
         </div>
       </div>
@@ -116,32 +121,4 @@
     </form>
   </div>
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script>
-(function () {
-  const btn = document.getElementById("use-location");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    if (!navigator.geolocation) {
-      document.getElementById("location-status").textContent = "Trình duyệt không hỗ trợ định vị.";
-      return;
-    }
-    const status = document.getElementById("location-status");
-    status.textContent = "Đang xác định vị trí...";
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        document.getElementById("latitude").value = pos.coords.latitude;
-        document.getElementById("longitude").value = pos.coords.longitude;
-        status.textContent = "Đã lấy vị trí nhà hàng.";
-      },
-      () => {
-        status.textContent = "Không lấy được vị trí. Bạn có thể nhập tay kinh độ/vĩ độ.";
-      },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 }
-    );
-  });
-})();
-</script>
 {% endblock %}

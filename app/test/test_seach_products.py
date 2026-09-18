@@ -18,7 +18,6 @@ def setup_data(app):
     return restaurant, dish1, dish2
 
 
-# ---------------- DAO: search ----------------
 
 def test_search_no_keyword_returns_none(setup_data):
     assert browse_dao.search('') is None
@@ -73,11 +72,31 @@ def test_search_excludes_inactive_dish(setup_data):
     db.session.commit()
 
     result = browse_dao.search('Nigiri')
-    # nhà hàng vẫn xuất hiện vì khớp tên nhà hàng hoặc món còn active
-    assert restaurant.id in [r.id for r in result.items]
+    assert restaurant.id not in [r.id for r in result.items]
 
 
-# ---------------- DAO: get_approved_restaurant ----------------
+def test_search_excludes_unavailable_dish(setup_data):
+    restaurant, dish1, _ = setup_data
+    dish1.is_available = False
+    db.session.commit()
+
+    result = browse_dao.search('Nigiri')
+    assert restaurant.id not in [r.id for r in result.items]
+
+
+def test_search_sort_by_name(app):
+    owner_a = make_restaurant_owner('a')
+    owner_b = make_restaurant_owner('b')
+    make_restaurant(owner_a, name='Alpha Sushi')
+    make_restaurant(owner_b, name='Zulu Sushi')
+    db.session.commit()
+
+    result = browse_dao.search('Sushi', sort='name_desc')
+    assert [restaurant.name for restaurant in result.items] == [
+        'Zulu Sushi', 'Alpha Sushi'
+    ]
+
+
 
 def test_get_approved_restaurant(setup_data):
     restaurant, _, _ = setup_data
@@ -95,7 +114,6 @@ def test_get_approved_restaurant_not_found(setup_data):
     assert browse_dao.get_approved_restaurant(99999) is None
 
 
-# ---------------- DAO: get_restaurant_menu ----------------
 
 def test_get_menu_only_active_available(setup_data):
     restaurant, dish1, dish2 = setup_data
@@ -114,7 +132,6 @@ def test_get_menu_returns_active(setup_data):
     assert {d.id for d in menu} == {dish1.id, dish2.id}
 
 
-# ---------------- ROUTER ----------------
 
 def test_search_view_renders(client, app, setup_data):
     res = client.get('/browse/search?q=Sushi')
@@ -125,6 +142,15 @@ def test_search_view_renders(client, app, setup_data):
 def test_search_view_no_keyword(client, app):
     res = client.get('/browse/search')
     assert res.status_code == 200
+
+
+def test_search_view_does_not_swallow_dao_errors(client, app, monkeypatch):
+    def fail(*args, **kwargs):
+        raise RuntimeError('database unavailable')
+
+    monkeypatch.setattr(browse_dao, 'search', fail)
+    with pytest.raises(RuntimeError, match='database unavailable'):
+        client.get('/browse/search?q=Sushi')
 
 
 def test_restaurant_menu_view(client, app, setup_data):

@@ -3,7 +3,8 @@
 
 {% block content %}
 <section class="restaurant-hero">
-  <h2 class="restaurant-hero-name">Duyệt Nhà Hàng</h2>
+  <span class="hero-eyebrow">Đối tác</span>
+  <h1 class="restaurant-hero-name">Quản lý nhà hàng</h1>
   <p class="restaurant-hero-desc">Phê duyệt đăng ký mới và quản lý trạng thái nhà hàng</p>
 </section>
 
@@ -31,8 +32,8 @@
 </ul>
 
 {% if restaurants %}
-<div class="table-responsive">
-  <table class="table align-middle bg-white rounded">
+<div class="admin-table-wrap table-responsive">
+  <table class="table align-middle admin-table">
     <thead>
       <tr>
         <th>Nhà hàng</th>
@@ -60,21 +61,26 @@
         </td>
         <td class="text-end">
           <div class="d-flex justify-content-end gap-1">
+            <a class="btn btn-outline-primary btn-sm"
+               href="{{ url_for('admin.restaurant_menu_view', restaurant_id=restaurant.id) }}">Thực đơn</a>
             {% if restaurant.status.name == 'PENDING' %}
             <form method="post" action="{{ url_for('admin.approve_restaurant_view', restaurant_id=restaurant.id) }}">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-success btn-sm" type="submit">Duyệt</button>
             </form>
             {% endif %}
 
             {% if restaurant.status.name == 'APPROVED' %}
             <form method="post" action="{{ url_for('admin.lock_restaurant_view', restaurant_id=restaurant.id) }}"
-                  onsubmit="return confirm('Khóa nhà hàng {{ restaurant.name }}?')">
+                  data-confirm="Khóa nhà hàng {{ restaurant.name }}?">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-danger btn-sm" type="submit">Khóa</button>
             </form>
             {% endif %}
 
             {% if restaurant.status.name == 'LOCKED' %}
             <form method="post" action="{{ url_for('admin.unlock_restaurant_view', restaurant_id=restaurant.id) }}">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-success btn-sm" type="submit">Mở khóa</button>
             </form>
             {% endif %}
@@ -87,5 +93,14 @@
 </div>
 {% else %}
 <div class="empty-state"><p>Không có nhà hàng nào.</p></div>
+{% endif %}
+{% if pagination.pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center mt-3" aria-label="Phân trang nhà hàng">
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_prev }}"
+     href="{{ url_for('admin.restaurants_view', status=current_status.name if current_status else None, page=pagination.prev_num) if pagination.has_prev else '#' }}">Trang trước</a>
+  <span class="text-muted small">Trang {{ pagination.page }}/{{ pagination.pages }}</span>
+  <a class="btn btn-outline-primary btn-sm {{ 'disabled' if not pagination.has_next }}"
+     href="{{ url_for('admin.restaurants_view', status=current_status.name if current_status else None, page=pagination.next_num) if pagination.has_next else '#' }}">Trang sau</a>
+</nav>
 {% endif %}
 {% endblock %}

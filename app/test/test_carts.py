@@ -2,7 +2,7 @@ import pytest
 
 from app import db
 from app.cart import dao as cart_dao
-from app.models import RestaurantStatus
+from app.models import DishPairing, RestaurantStatus
 from app.test.test_base import (app, client, test_session,
                                 make_restaurant_owner, make_restaurant,
                                 make_customer, make_dish, login)
@@ -16,7 +16,6 @@ def _setup_restaurant_and_dish(prefix=''):
     return restaurant, dish
 
 
-# ---------------- DAO: thêm món ----------------
 
 def test_add_to_cart_creates_cart(app):
     restaurant, dish = _setup_restaurant_and_dish()
@@ -108,7 +107,6 @@ def test_clear_all_carts_then_switch_restaurant(app):
     assert carts[0].restaurant_id == restaurant_b.id
 
 
-# ---------------- DAO: cập nhật / xóa ----------------
 
 def test_update_cart_item_success(app):
     _, dish = _setup_restaurant_and_dish()
@@ -162,7 +160,7 @@ def test_remove_cart_item_success(app):
     item = cart_dao.get_user_carts(customer.id)[0].items[0]
     cart_dao.remove_cart_item(customer.id, item.id)
 
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_remove_cart_item_not_in_cart(app):
@@ -183,7 +181,7 @@ def test_clear_cart(app):
     cart_id = cart_dao.get_user_carts(customer.id)[0].id
     cart_dao.clear_cart(customer.id, cart_id)
 
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_cart_stats(app):
@@ -197,7 +195,6 @@ def test_cart_stats(app):
     assert stats['total_amount'] == 240000
 
 
-# ---------------- ROUTER ----------------
 
 def test_cart_view_requires_login(client, app):
     assert client.get('/cart/').status_code == 302
@@ -233,6 +230,126 @@ def customer_id():
     return auth_dao.get_user_by_username('customer').id
 
 
+def _pair(source, target, confidence=0.8, lift=1.5, support=0.4):
+    db.session.add(DishPairing(
+        dish_id=source.id,
+        paired_dish_id=target.id,
+        confidence=confidence,
+        lift=lift,
+        support=support,
+    ))
+
+
+def _pairing_cart():
+    restaurant, source = _setup_restaurant_and_dish()
+    customer = make_customer()
+    db.session.commit()
+    cart_dao.add_to_cart(customer.id, source.id)
+    return restaurant, source, customer
+
+
+def test_pairing_suggestions_returns_ranked_valid_dishes(client, app):
+    restaurant, source, _ = _pairing_cart()
+    by_support = make_dish(restaurant, name='Theo support')
+    by_lift = make_dish(restaurant, name='Theo lift')
+    first = make_dish(restaurant, name='Confidence cao')
+    _pair(source, by_support, confidence=0.7, lift=1.2, support=0.9)
+    _pair(source, by_lift, confidence=0.7, lift=1.8, support=0.1)
+    _pair(source, first, confidence=0.9, lift=1.0, support=0.1)
+    db.session.commit()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert response.status_code == 200
+    assert [item['name'] for item in response.get_json()['suggestions']] == [
+        'Confidence cao', 'Theo lift', 'Theo support'
+    ]
+
+
+def test_pairing_suggestions_returns_empty_without_rules(client, app):
+    _, source, _ = _pairing_cart()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert response.status_code == 200
+    assert response.get_json() == {'suggestions': []}
+
+
+def test_pairing_suggestions_excludes_dish_already_in_cart(client, app):
+    restaurant, source, customer = _pairing_cart()
+    existing = make_dish(restaurant, name='Đã có trong giỏ')
+    _pair(source, existing)
+    db.session.commit()
+    cart_dao.add_to_cart(customer.id, existing.id)
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert response.get_json() == {'suggestions': []}
+
+
+def test_pairing_suggestions_excludes_unavailable_dish(client, app):
+    restaurant, source, _ = _pairing_cart()
+    unavailable = make_dish(
+        restaurant, name='Hết hàng', is_available=False
+    )
+    _pair(source, unavailable)
+    db.session.commit()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert response.get_json() == {'suggestions': []}
+
+
+def test_pairing_suggestions_excludes_other_restaurant(client, app):
+    _, source, _ = _pairing_cart()
+    other_owner = make_restaurant_owner('other')
+    other_restaurant = make_restaurant(other_owner)
+    other_dish = make_dish(other_restaurant, name='Khác nhà hàng')
+    _pair(source, other_dish)
+    db.session.commit()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert response.get_json() == {'suggestions': []}
+
+
+def test_pairing_suggestions_returns_at_most_three(client, app):
+    restaurant, source, _ = _pairing_cart()
+    for index in range(4):
+        target = make_dish(restaurant, name=f'Món kèm {index}')
+        _pair(source, target, confidence=0.9 - index / 10)
+    db.session.commit()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{source.id}')
+
+    assert len(response.get_json()['suggestions']) == 3
+
+
+def test_pairing_suggestions_requires_login(client, app):
+    response = client.get('/cart/pairing-suggestions/1')
+
+    assert response.status_code == 302
+    assert '/auth/login' in response.headers['Location']
+
+
+def test_pairing_suggestions_rejects_dish_not_in_cart(client, app):
+    restaurant, _, _ = _pairing_cart()
+    not_in_cart = make_dish(restaurant, name='Không nằm trong giỏ')
+    db.session.commit()
+    login(client, username='customer')
+
+    response = client.get(f'/cart/pairing-suggestions/{not_in_cart.id}')
+
+    assert response.status_code == 404
+    assert response.get_json()['error'] == 'Món ăn không thuộc giỏ hàng hiện tại'
+
+
 def test_update_cart_route(client, app):
     _, dish = _setup_restaurant_and_dish()
     customer = make_customer()
@@ -257,7 +374,7 @@ def test_remove_cart_route(client, app):
     item = cart_dao.get_user_carts(customer.id)[0].items[0]
     res = client.post('/cart/remove', data={'item_id': item.id})
     assert res.status_code == 302
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_clear_cart_route(client, app):
@@ -270,7 +387,7 @@ def test_clear_cart_route(client, app):
     cart_id = cart_dao.get_user_carts(customer.id)[0].id
     res = client.post('/cart/clear', data={'cart_id': cart_id})
     assert res.status_code == 302
-    assert cart_dao.get_user_carts(customer.id)[0].items == []
+    assert cart_dao.get_user_carts(customer.id) == []
 
 
 def test_cart_stats_api(client, app):

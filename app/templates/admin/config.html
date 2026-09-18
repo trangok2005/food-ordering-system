@@ -2,8 +2,8 @@
 {% block title %}Cấu hình hệ thống | Food Ordering System{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-  <h2 class="mb-3">Cấu hình hệ thống</h2>
+<section class="py-4">
+  <div class="dashboard-heading"><div><span class="page-eyebrow">Ràng buộc mặc định</span><h1 class="section-title mb-0">Cấu hình hệ thống</h1></div></div>
   {% include 'admin/_nav.html' %}
 
   <div class="alert alert-secondary small">
@@ -12,11 +12,11 @@
     xác nhận đơn trong trang cài đặt của họ.
   </div>
 
-  <div class="card shadow-sm">
+  <div class="card">
     <div class="card-body">
-      <table class="table align-middle">
+      <div class="table-responsive"><table class="table align-middle">
         <thead>
-          <tr><th>Khóa</th><th>Giá trị</th><th style="width: 320px;">Cập nhật</th></tr>
+          <tr><th>Khóa</th><th>Giá trị</th><th>Cập nhật</th></tr>
         </thead>
         <tbody>
           {% for cfg in configs %}
@@ -28,6 +28,7 @@
             <td><span class="fw-bold">{{ cfg.value or '(chưa đặt - dùng mã nguồn)' }}</span></td>
             <td>
               <form method="post" action="{{ url_for('admin.update_config_view') }}" class="d-flex gap-2">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="key" value="{{ cfg.key }}" />
                 <input type="number" name="value" value="{{ cfg.value }}" class="form-control form-control-sm" required />
                 <button type="submit" class="btn btn-sm btn-primary">Lưu</button>
@@ -36,8 +37,8 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
     </div>
   </div>
-</div>
+</section>
 {% endblock %}

@@ -2,8 +2,13 @@
 {% block title %}Giỏ Hàng | Food Ordering System{% endblock %}
 
 {% block content %}
-<section class="cart-page">
-  <h2 class="section-title">Giỏ Hàng</h2>
+<section class="cart-page"
+         data-pairing-cart
+         data-add-url="{{ url_for('cart.add_to_cart') }}"
+         data-csrf-token="{{ csrf_token() }}">
+  <div class="section-header">
+    <div><span class="page-eyebrow">Đơn hàng của bạn</span><h1 class="section-title">Giỏ hàng</h1></div>
+  </div>
 
   {% if carts %}
   {% for cart in carts %}
@@ -11,8 +16,9 @@
     <div class="cart-card-header">
       <h3 class="cart-restaurant">{{ cart.restaurant.name }}</h3>
       <form method="post" action="{{ url_for('cart.clear_cart') }}">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="cart_id" value="{{ cart.id }}" />
-        <button class="btn btn-outline-danger btn-sm" type="submit">Xóa toàn bộ</button>
+        <button class="btn btn-outline-danger btn-sm" type="submit">Xóa giỏ hàng</button>
       </form>
     </div>
 
@@ -35,10 +41,24 @@
               {% if not item.dish.is_available %}
               <span class="badge bg-danger ms-1">Hết hàng</span>
               {% endif %}
+              {% if item.dish.is_available %}
+              <div class="mt-2">
+                <button type="button"
+                        class="btn btn-link btn-sm pairing-toggle p-0 text-decoration-none"
+                        data-pairing-toggle
+                        data-endpoint="{{ url_for('cart.pairing_suggestions', dish_id=item.dish.id) }}"
+                        data-target="pairing-{{ item.id }}"
+                        aria-expanded="false"
+                        aria-controls="pairing-{{ item.id }}">
+                  Gợi ý món đi kèm <span aria-hidden="true">▼</span>
+                </button>
+              </div>
+              {% endif %}
             </td>
             <td class="text-center">{{ item.dish.price|vnd }}</td>
             <td class="text-center">
               <form method="post" action="{{ url_for('cart.update_cart_item') }}" class="qty-form">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="item_id" value="{{ item.id }}" />
                 <input
                   class="form-control form-control-sm qty-input"
@@ -53,11 +73,19 @@
             <td class="text-end">{{ (item.dish.price * item.quantity)|vnd }}</td>
             <td class="text-end">
               <form method="post" action="{{ url_for('cart.remove_cart_item') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="item_id" value="{{ item.id }}" />
-                <button class="btn btn-outline-danger btn-sm" type="submit" title="Xóa món">&#128465;</button>
+                <button class="btn btn-outline-danger btn-sm" type="submit" aria-label="Xóa {{ item.dish.name }}">Xóa</button>
               </form>
             </td>
           </tr>
+          {% if item.dish.is_available %}
+          <tr id="pairing-{{ item.id }}" class="pairing-row d-none">
+            <td colspan="5">
+              <div class="pairing-panel" data-pairing-panel aria-live="polite"></div>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
@@ -65,7 +93,7 @@
 
     <div class="cart-total">
       <span>Tổng cộng:</span>
-      <strong>{{ cart.total_amount()|vnd }}</strong>
+      <strong data-cart-total>{{ cart.total_amount()|vnd }}</strong>
     </div>
   </div>
   {% endfor %}
@@ -76,9 +104,14 @@
   </div>
   {% else %}
   <div class="empty-state">
-    <p>Giỏ hàng của bạn đang trống.</p>
+    <h3>Giỏ hàng đang trống</h3>
+    <p>Khám phá các nhà hàng và thêm món bạn yêu thích.</p>
     <a href="{{ url_for('index') }}" class="btn btn-primary">Khám phá món ngon</a>
   </div>
   {% endif %}
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/cart.js') }}"></script>
 {% endblock %}
