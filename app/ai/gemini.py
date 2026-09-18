@@ -14,20 +14,18 @@ def _api_key():
 
 
 def is_configured():
-    # Key giữ "your_" là key mẫu, chưa thật sự cấu hình.
+    # Bỏ qua key mẫu trong .env.
     return bool(_api_key() and not _api_key().startswith('your_'))
 
 
 def analyze_sentiment(comment):
-    """Gọi Gemini phân tích cảm xúc của bình luận đánh giá món ăn.
-
-    Trả về (label, score), label là 'POSITIVE' | 'NEUTRAL' |
-    'NEGATIVE', score nằm trong [-1, 1].
-    """
+    """Trả về (label, score) cảm xúc, với score trong [-1, 1]."""
+    comment = (comment or '').strip()
+    if not comment or len(comment) > 1000:
+        raise ValueError('Bình luận phải có từ 1 đến 1000 ký tự')
     if not is_configured():
         raise RuntimeError('Chưa cấu hình GEMINI_API_KEY')
 
-    # Yêu cầu Gemini trả về đúng 1 chuỗi JSON để dễ parse.
     prompt = (
         'Phân tích cảm xúc của bình luận đánh giá món ăn tiếng Việt '
         'dưới đây. Chỉ trả về JSON đúng định dạng: '
@@ -44,16 +42,15 @@ def analyze_sentiment(comment):
         }]
     }
 
-    # Gemini đôi khi quá tải (timeout/5xx) nên thử lại vài lần,
-    # chờ dần dần giữa các lần để không dập server.
+    # Thử lại khi Gemini quá tải hoặc mất kết nối.
     last_error = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             resp = requests.post(
                 url,
                 params={'key': _api_key()},
                 json=payload,
-                timeout=45,
+                timeout=10,
             )
             resp.raise_for_status()
 
@@ -70,22 +67,19 @@ def analyze_sentiment(comment):
         except (requests.Timeout, requests.ConnectionError) as e:
             last_error = e
         except requests.HTTPError as e:
-            # Lỗi 5xx là lỗi phía server, thử lại được;
-            # 4xx là lỗi do ta gửi sai -> báo luôn.
+            # Không thử lại với lỗi 4xx.
             if resp.status_code < 500:
                 raise RuntimeError(f'Gemini API lỗi: {e}')
             last_error = e
 
-        if attempt < 2:
+        if attempt < 1:
             time.sleep(2 * (attempt + 1))
 
-    raise RuntimeError(f'Gemini API không phản hồi sau 3 lần thử: {last_error}')
+    raise RuntimeError(f'Gemini API không phản hồi sau 2 lần thử: {last_error}')
 
 
 def _parse_response(text):
-    """Bóc label/score từ chuỗi JSON Gemini trả về."""
-    # Gemini hay bọc thêm văn bản quanh JSON, nên chỉ lấy
-    # đoạn {...} đầu tiên rồi parse.
+    # Gemini có thể bọc thêm văn bản quanh JSON.
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
         raise ValueError('Gemini không trả về JSON hợp lệ')
@@ -101,5 +95,4 @@ def _parse_response(text):
     if label not in ('POSITIVE', 'NEUTRAL', 'NEGATIVE'):
         raise ValueError('Nhãn cảm xúc không hợp lệ')
 
-    # Giới hạn score trong [-1, 1] phòng Gemini trả quá ngưỡng.
     return label, max(-1.0, min(1.0, score))
