@@ -14,7 +14,6 @@ from app.extensions import db, login, migrate
 
 load_dotenv()
 
-# Giữ tương thích với các import cũ
 __all__ = ['create_app', 'db', 'login', 'migrate']
 
 

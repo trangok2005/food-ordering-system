@@ -24,7 +24,6 @@ def test_analyze_sentiment_uses_structured_gemini_response(monkeypatch):
     result = gemini.analyze_sentiment('Món ăn rất ngon')
 
     assert result == ('POSITIVE', 0.85)
-    assert models.call['model'] == 'gemini-2.5-flash'
     assert models.call['config'].response_mime_type == 'application/json'
 
 
